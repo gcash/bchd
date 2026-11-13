@@ -263,6 +263,11 @@ const (
 	// value out of range, or the outputs it spends are together worth more
 	// than the money supply.
 	ErrTxInValueOutOfRange
+
+	// ErrBadCoinbaseShape indicates the coinbase transaction has version 1,
+	// lock time 0, a final input sequence and outputs worth at least 25 BCH
+	// once the 2027 upgrade forbids that shape.
+	ErrBadCoinbaseShape
 )
 
 // Map of ErrorCode values back to their constant names for pretty printing.
@@ -319,6 +324,7 @@ var errorCodeStrings = map[ErrorCode]string{
 	ErrTxOutValueTooHigh:     "ErrTxOutValueTooHigh",
 	ErrTxOutTotalTooHigh:     "ErrTxOutTotalTooHigh",
 	ErrTxInValueOutOfRange:   "ErrTxInValueOutOfRange",
+	ErrBadCoinbaseShape:      "ErrBadCoinbaseShape",
 }
 
 // String returns the ErrorCode as a human-readable name.

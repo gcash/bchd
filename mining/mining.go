@@ -213,13 +213,14 @@ func standardCoinbaseScript(nextBlockHeight int32, extraNonce uint64) ([]byte, e
 		Script()
 }
 
-// createCoinbaseTx returns a coinbase transaction paying an appropriate subsidy
-// based on the passed block height to the provided address.  When the address
-// is nil, the coinbase transaction will instead be redeemable by anyone.
+// createCoinbaseTx returns a coinbase transaction paying the subsidy of the
+// block the passed tick schedule was built for to the provided address.  When
+// the address is nil, the coinbase transaction will instead be redeemable by
+// anyone.
 //
 // See the comment for NewBlockTemplate for more information about why the nil
 // address handling is useful.
-func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockHeight int32, addr bchutil.Address) (*bchutil.Tx, error) {
+func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, sched blockchain.TickSchedule, addr bchutil.Address) (*bchutil.Tx, error) {
 	// Create the script to pay to the provided payment address if one was
 	// specified.  Otherwise create a script that allows the coinbase to be
 	// redeemable by anyone.
@@ -239,7 +240,10 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 		}
 	}
 
-	tx := wire.NewMsgTx(wire.TxVersion)
+	// Version 2 keeps the coinbase clear of the version 1, lock time 0
+	// shape that the 1-minute block upgrade forbids for coinbases paying 25
+	// BCH or more, whatever the fees add.
+	tx := wire.NewMsgTx(2)
 	tx.AddTxIn(&wire.TxIn{
 		// Coinbase transactions have no inputs, so previous outpoint is
 		// zero hash and max index.
@@ -249,10 +253,11 @@ func createCoinbaseTx(params *chaincfg.Params, coinbaseScript []byte, nextBlockH
 		Sequence:        wire.MaxTxInSequenceNum,
 	})
 	tx.AddTxOut(&wire.TxOut{
-		Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, params),
+		Value: blockchain.CalcBlockSubsidy(sched.NextBlockTicks(),
+			sched.BlockInterval(sched.NextHeight()), params),
 		PkScript: pkScript,
 	})
-	padCoinbaseScript(tx, minCoinbaseSize(params, nextBlockHeight))
+	padCoinbaseScript(tx, minCoinbaseSize(params, sched.NextHeight()))
 
 	return bchutil.NewTx(tx), nil
 }
@@ -390,13 +395,14 @@ func NewBlkTmplGenerator(policy *Policy, params *chaincfg.Params,
 //
 // Transactions paying less than the TxMinFreeFee policy setting per kilobyte
 // are skipped.  Any transactions which would cause the block to exceed the
-// BlockMaxSize policy setting or the block size limit less 1000 bytes, exceed
-// the maximum allowed signature checks per block, or otherwise cause the block
-// to be invalid are skipped.
+// BlockMaxSize policy setting, scaled to the target interval of the block, or
+// the block size limit less 1000 bytes, exceed the maximum allowed signature
+// checks per block, or otherwise cause the block to be invalid are skipped.
 func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*BlockTemplate, error) {
 	// Extend the most recently known best block.
 	best := g.chain.BestSnapshot()
 	nextBlockHeight := best.Height + 1
+	nextBlockTicks := best.TickSchedule.NextBlockTicks()
 
 	ts := medianAdjustedTime(best, g.timeSource)
 
@@ -408,11 +414,13 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 	maxSigChecks := min(maxBlockSize/blockchain.BlockMaxBytesMaxSigChecksRatio,
 		math.MaxUint32)
 
-	// Select transactions up to the configured size, but no further than
-	// the limit less room for the coinbase.
+	// Select transactions up to the configured size, scaled to the
+	// interval of the next block, but no further than the limit less room
+	// for the coinbase.
 	selectMaxSize := maxBlockSize - 1000
 	if g.policy.BlockMaxSize != 0 {
-		selectMaxSize = min(selectMaxSize, uint64(g.policy.BlockMaxSize))
+		selectMaxSize = min(selectMaxSize,
+			g.policy.blockMaxSize(best.NextBlockInterval))
 	}
 	selectMaxSize = min(max(selectMaxSize, 1000), math.MaxUint32)
 
@@ -430,7 +438,7 @@ func (g *BlkTmplGenerator) NewBlockTemplate(payToAddress bchutil.Address) (*Bloc
 		return nil, err
 	}
 	coinbaseTx, err := createCoinbaseTx(g.chainParams, coinbaseScript,
-		nextBlockHeight, payToAddress)
+		best.TickSchedule, payToAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -479,8 +487,8 @@ mempoolLoop:
 			log.Tracef("Skipping coinbase tx %s", tx.Hash())
 			continue
 		}
-		if !blockchain.IsFinalizedTransaction(tx, nextBlockHeight,
-			best.MedianTime) {
+		if !blockchain.IsFinalizedTransaction(tx, nextBlockTicks,
+			best.MedianTime, best.Upgrade2027Active) {
 
 			log.Tracef("Skipping non-finalized tx %s", tx.Hash())
 			continue
@@ -612,8 +620,8 @@ mempoolLoop:
 
 		// Ensure the transaction inputs pass all of the necessary
 		// preconditions before allowing it to be added to the block.
-		_, err = blockchain.CheckTransactionInputs(tx, nextBlockHeight,
-			blockUtxos, g.chainParams)
+		_, err = blockchain.CheckTransactionInputs(tx,
+			best.TickSchedule, blockUtxos, g.chainParams)
 		if err != nil {
 			log.Tracef("Skipping tx %s due to error in "+
 				"CheckTransactionInputs: %v", tx.Hash(), err)
@@ -623,7 +631,7 @@ mempoolLoop:
 		seqLock, err := g.chain.NextBlockSequenceLock(&best.Hash, tx,
 			blockUtxos)
 		if err != nil || !blockchain.SequenceLockActive(seqLock,
-			nextBlockHeight, best.MedianTime) {
+			nextBlockTicks, best.MedianTime) {
 
 			log.Tracef("Skipping tx %s because its sequence locks "+
 				"are not met: %v", tx.Hash(), err)

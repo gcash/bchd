@@ -159,12 +159,13 @@ type config struct {
 	DisableCheckpoints      bool          `long:"nocheckpoints" description:"Disable built-in checkpoints.  Don't do this unless you know what you're doing."`
 	MaxReorgDepth           int32         `long:"maxreorgdepth" description:"Depth at which main chain blocks are finalized, so that blocks forking the chain below them are rejected (-1 to disable)"`
 	FinalizationDelay       int64         `long:"finalizationdelay" description:"Time in seconds a block must have been known, and the node running, before the block can be finalized"`
+	Upgrade2027Time         *uint64       `long:"upgrade2027activationtime" description:"Median time past, in seconds since the epoch, at which the May 2027 upgrade to 1-minute blocks activates, for testing -- Must not be before the network's ASERT anchor block; changing it once a block reached the old or new time requires a fresh data directory (default: 1810382400, chipnet: 1794744000)"`
 	DbType                  string        `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	Profile                 string        `long:"profile" description:"Enable HTTP profiling on the given port on localhost, or on IP:port -- NOTE port must be between 1024 and 65535"`
 	CPUProfile              string        `long:"cpuprofile" description:"Write CPU profile to the specified file"`
 	DebugLevel              string        `short:"d" long:"debuglevel" description:"Logging level for all subsystems {trace, debug, info, warn, error, critical} -- You may also specify <subsystem>=<level>,<subsystem2>=<level>,... to set the log level for individual subsystems -- Use show to list available subsystems"`
 	Upnp                    bool          `long:"upnp" description:"Use UPnP to map our listening port outside of NAT"`
-	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The block size (in bytes) that P2P and RPC message limits are sized for, and on regtest and simnet the floor of the block size limit -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000"`
+	ExcessiveBlockSize      uint32        `long:"excessiveblocksize" description:"The block size (in bytes) that P2P and RPC message limits are sized for, and on regtest and simnet the floor of the block size limit of a 10-minute block, a tenth of it for a 1-minute block -- 0 uses the network's default, which is also the minimum: 2000000 on testnet4 and chipnet, otherwise 32000000; the maximum is 2000000000"`
 	MinRelayTxFee           float64       `long:"minrelaytxfee" description:"The minimum fee rate in BCH/kB a transaction must pay to be relayed, accepted into the mempool and mined -- Must be above 0 and at most 21000000"`
 	MaxTxFee                float64       `long:"maxtxfee" description:"The maximum total fee in BCH of a transaction sent with sendrawtransaction or checked with testmempoolaccept, unless allowhighfees is set"`
 	FreeTxRelayLimit        float64       `long:"limitfreerelay" description:"Deprecated, has no effect: free transactions are no longer relayed"`
@@ -174,7 +175,7 @@ type config struct {
 	Generate                bool          `long:"generate" description:"Generate (mine) bitcoins using the CPU"`
 	MiningAddrs             []string      `long:"miningaddr" description:"Add the specified payment address to the list of addresses to use for generated blocks -- At least one address is required if the generate option is set"`
 	BlockMinSize            uint32        `long:"blockminsize" description:"Deprecated, has no effect: blocks no longer include transactions below the minimum relay fee"`
-	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a block -- 0 follows the consensus limit less 1000 bytes"`
+	BlockMaxSize            uint32        `long:"blockmaxsize" description:"Maximum block size in bytes to be used when creating a 10-minute block, a tenth of it for a 1-minute block -- 0 follows the consensus limit less 1000 bytes"`
 	BlockPrioritySize       uint32        `long:"blockprioritysize" description:"Deprecated, has no effect: blocks no longer have a high-priority area"`
 	CoinbaseFlags           string        `long:"cbflags" description:"Comment to append to the coinbase input when generating a block template." default:"/bchd/"`
 	UserAgentComments       []string      `long:"uacomment" description:"Comment to add to the user agent -- See BIP 14 for more information."`
@@ -199,7 +200,7 @@ type config struct {
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`
-	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode. Cannot be less than 288."`
+	PruneDepth              uint32        `long:"prunedepth" description:"The number of blocks to retain when running in pruned mode, counted in 10-minute blocks: after the upgrade to 1-minute blocks ten times as many are kept. Cannot be less than 288."`
 	TargetOutboundPeers     uint32        `long:"targetoutboundpeers" description:"Number of outbound connections to maintain"`
 	ReIndexChainState       bool          `long:"reindexchainstate" description:"Rebuild the UTXO database from currently indexed blocks on disk."`
 	FastSync                bool          `long:"fastsync" description:"Download the UTXO set of the last checkpoint that has one and sync full blocks from there to the tip rather than from genesis."`
@@ -831,6 +832,29 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
+	// The upgrade can't activate before the ASERT anchor, as the difficulty
+	// of 1-minute blocks is computed from it.  Regtest and simnet don't
+	// adjust the difficulty, so any time is accepted there.
+	if cfg.Upgrade2027Time != nil {
+		var minTime uint64
+		if !activeNetParams.NoDifficultyAdjustment {
+			minTime = uint64(activeNetParams.AsertDifficultyAnchorParentTimestamp)
+		}
+		if *cfg.Upgrade2027Time < minTime ||
+			*cfg.Upgrade2027Time > math.MaxInt64 {
+
+			str := "%s: The upgrade2027activationtime option must be " +
+				"at least %d and at most %d -- parsed [%d]"
+			err := fmt.Errorf(str, funcName, minTime, int64(math.MaxInt64),
+				*cfg.Upgrade2027Time)
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, usageMessage)
+			return nil, nil, err
+		}
+		bchdLog.Infof("Using upgrade 2027 activation time override: %d",
+			*cfg.Upgrade2027Time)
+	}
+
 	if cfg.Prune && cfg.PruneDepth < minPruneDepth {
 		str := "%s: The pruneheight option may not be less than %d -- parsed [%d]"
 		err := fmt.Errorf(str, funcName, minPruneDepth, cfg.PruneDepth)
@@ -1022,8 +1046,19 @@ func loadConfig() (*config, []string, error) {
 		return nil, nil, err
 	}
 
-	// The excessive block size cannot be set less than the network's default
-	// block size, which is also used when it isn't set, but it can be higher.
+	// The excessive block size cannot be more than the largest block size
+	// limit, nor less than the network's default block size, which is also
+	// used when it isn't set.
+	if uint64(cfg.ExcessiveBlockSize) > blockchain.TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT {
+		str := "%s: The excessiveblocksize option may not be more than " +
+			"%d -- parsed [%d]"
+		err := fmt.Errorf(str, funcName,
+			blockchain.TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT,
+			cfg.ExcessiveBlockSize)
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, usageMessage)
+		return nil, nil, err
+	}
 	cfg.ExcessiveBlockSize = max(cfg.ExcessiveBlockSize,
 		activeNetParams.DefaultConsensusBlockSize)
 

@@ -155,7 +155,7 @@ func addBlock(chain *BlockChain, prev *bchutil.Block, spends []*spendableOut) (*
 		SignatureScript: coinbaseScript,
 	})
 	cb.AddTxOut(&wire.TxOut{
-		Value:    CalcBlockSubsidy(blockHeight, chain.chainParams),
+		Value:    legacySubsidy(blockHeight, chain.chainParams),
 		PkScript: opTrueScript,
 	})
 	if size := cb.SerializeSize(); size < MagneticAnomalyMinTransactionSize {

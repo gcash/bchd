@@ -96,8 +96,7 @@ func TestTxFailureSendsNoReject(t *testing.T) {
 		FetchUtxoView: func(*bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
 			return nil, errors.New("injected failure")
 		},
-		BestHeight:     func() int32 { return 0 },
-		MedianTimePast: time.Now,
+		BestSnapshot: testBestState(0),
 	})
 	peer, rejects := rejectTestPeer(t, sm, params)
 

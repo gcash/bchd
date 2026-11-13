@@ -4418,6 +4418,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		FastSyncDataDir:    cfg.DataDir,
 		Proxy:              cfg.Proxy,
 
+		Upgrade2027ActivationTime:   cfg.Upgrade2027Time,
 		NotifyMaxBlockSizeLookAhead: wire.SetMaxBlockSizeLookAhead,
 	})
 	if err != nil {
@@ -4488,8 +4489,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		ChainParams:            chainParams,
 		FetchUtxoView:          s.chain.FetchUtxoView,
 		FetchUtxoEntryUncached: s.chain.FetchUtxoEntryUncached,
-		BestHeight:             func() int32 { return s.chain.BestSnapshot().Height },
-		MedianTimePast:         func() time.Time { return s.chain.BestSnapshot().MedianTime },
+		BestSnapshot:           s.chain.BestSnapshot,
 		CalcSequenceLock: func(tx *bchutil.Tx, view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 			return s.chain.CalcSequenceLock(tx, view, true)
 		},

@@ -151,9 +151,10 @@ func main() {
 	// Setup chain.  Ignore notifications since they aren't needed for this
 	// util.
 	chain, err := blockchain.New(&blockchain.Config{
-		DB:          db,
-		ChainParams: activeNetParams,
-		TimeSource:  blockchain.NewMedianTime(),
+		DB:                       db,
+		ChainParams:              activeNetParams,
+		TimeSource:               blockchain.NewMedianTime(),
+		UseStoredUpgrade2027Time: true,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize chain: %v\n", err)

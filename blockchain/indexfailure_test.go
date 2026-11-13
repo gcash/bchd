@@ -97,7 +97,7 @@ func TestIndexFailureLog(t *testing.T) {
 				indexer.connectErr = c.err
 			}
 			block := procTestBlock(t, blocks[h-1].MsgBlock(), h-1,
-				CalcBlockSubsidy(h, &params), params.PowLimitBits, nil)
+				legacySubsidy(h, &params), params.PowLimitBits, nil)
 			_, _, err := chain.ProcessBlock(block, BFNone)
 			if err != nil && (!c.connect || h != 2) {
 				t.Fatalf("%s: block %d: %v", c.name, h, err)

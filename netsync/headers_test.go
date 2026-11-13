@@ -80,6 +80,7 @@ func newHeadersTestHarness(t *testing.T,
 			syncCandidate:   true,
 			requestedTxns:   make(map[chainhash.Hash]struct{}),
 			requestedBlocks: make(map[chainhash.Hash]struct{}),
+			blocksInFlight:  make(map[chainhash.Hash]struct{}),
 		}
 	}
 	sm.syncPeer.Store(h.syncPeer)

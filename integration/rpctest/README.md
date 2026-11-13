@@ -17,6 +17,22 @@ This package was designed specifically to act as an RPC testing harness for
 any project wishing to programmatically drive a `bchd` instance of its
 systems/integration tests.
 
+A harness starts `bchd` with the May 2027 upgrade to 1-minute blocks set to
+never activate, so tests don't change rules with the date. A test passes
+`rpctest.Upgrade2027Arg(rpctest.Upgrade2027InThePast)` among the extra
+arguments of `rpctest.New` to mine a chain that activates it within its first
+few blocks.
+
+The `BCHD_RPCTEST_UPGRADE2027` environment variable changes the default of the
+harnesses whose test does not choose a time: `never` (the default), `past` for
+`rpctest.Upgrade2027InThePast`, or a time in seconds.  Run the integration tests
+under both rule sets with:
+
+```bash
+$ go test -tags rpctest ./integration/...
+$ BCHD_RPCTEST_UPGRADE2027=past go test -tags rpctest ./integration/...
+```
+
 ## Installation and Updating
 
 ```bash

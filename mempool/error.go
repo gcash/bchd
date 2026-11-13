@@ -450,6 +450,8 @@ func BlockRejectReason(err error, blockVersion int32) string {
 		return "bad-cb-height"
 	case blockchain.ErrBadCoinbaseHeight:
 		return "bad-cb-height"
+	case blockchain.ErrBadCoinbaseShape:
+		return "bad-cb-shape"
 	case blockchain.ErrScriptMalformed:
 		return "blk-bad-inputs"
 	case blockchain.ErrScriptValidation:

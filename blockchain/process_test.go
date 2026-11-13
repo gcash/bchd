@@ -165,7 +165,7 @@ func testOrphanContext(t *testing.T, forkHeight int32,
 	chain.TstSetCoinbaseMaturity(1)
 
 	bits := params.PowLimitBits
-	subsidy := CalcBlockSubsidy(1, &params)
+	subsidy := legacySubsidy(1, &params)
 	b1 := procTestBlock(t, params.GenesisBlock, 0, subsidy, bits, nil)
 	if _, _, err := chain.ProcessBlock(b1, BFNone); err != nil {
 		t.Fatalf("block 1: %v", err)
@@ -220,7 +220,7 @@ func TestOrphanNoFastAddInheritance(t *testing.T) {
 	}
 	defer teardown()
 
-	subsidy := CalcBlockSubsidy(1, &params)
+	subsidy := legacySubsidy(1, &params)
 	parent := procTestBlock(t, params.GenesisBlock, 0, subsidy,
 		params.PowLimitBits, nil)
 
@@ -266,7 +266,7 @@ func TestOrphanSiblingAfterFailedOrphan(t *testing.T) {
 	defer teardown()
 
 	bits := params.PowLimitBits
-	subsidy := CalcBlockSubsidy(1, &params)
+	subsidy := legacySubsidy(1, &params)
 	b1 := procTestBlock(t, params.GenesisBlock, 0, subsidy, bits, nil)
 	if _, _, err := chain.ProcessBlock(b1, BFNone); err != nil {
 		t.Fatalf("block 1: %v", err)
@@ -321,7 +321,7 @@ func TestOrphanFailsSideChainParent(t *testing.T) {
 	defer teardown()
 
 	bits := params.PowLimitBits
-	subsidy := CalcBlockSubsidy(1, &params)
+	subsidy := legacySubsidy(1, &params)
 	b1 := procTestBlock(t, params.GenesisBlock, 0, subsidy, bits, nil)
 	b2 := procTestBlock(t, b1.MsgBlock(), 1, subsidy, bits, nil)
 	for _, block := range []*bchutil.Block{b1, b2} {
@@ -374,7 +374,7 @@ func orphanTestBlock(t *testing.T, params *chaincfg.Params, nonce uint32,
 		Sequence:         wire.MaxTxInSequenceNum,
 		SignatureScript:  cbScript,
 	})
-	cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(5, params), opTrueScript,
+	cb.AddTxOut(wire.NewTxOut(legacySubsidy(5, params), opTrueScript,
 		wire.TokenData{}))
 	pad := wire.NewTxOut(0, []byte{txscript.OP_RETURN}, wire.TokenData{})
 	cb.AddTxOut(pad)
@@ -499,7 +499,7 @@ func testUtxoReadError(t *testing.T, corrupt []byte) {
 	chain.TstSetCoinbaseMaturity(1)
 
 	bits := params.PowLimitBits
-	subsidy := CalcBlockSubsidy(1, &params)
+	subsidy := legacySubsidy(1, &params)
 	b1 := procTestBlock(t, params.GenesisBlock, 0, subsidy, bits, nil)
 	b2 := procTestBlock(t, b1.MsgBlock(), 1, subsidy, bits, nil)
 	for _, b := range []*bchutil.Block{b1, b2} {
@@ -570,7 +570,7 @@ func TestInvalidateFirstBlock(t *testing.T) {
 		t.Fatalf("tip %v, want the genesis block", tip.hash)
 	}
 	block := procTestBlock(t, blocks[0].MsgBlock(), 0,
-		CalcBlockSubsidy(1, params)-1, params.PowLimitBits, nil)
+		legacySubsidy(1, params)-1, params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 		t.Fatal(err)
 	}
@@ -591,7 +591,7 @@ func TestInvalidateSideBlock(t *testing.T) {
 	var side []*bchutil.Block
 	for h := int32(3); h <= 4; h++ {
 		block := procTestBlock(t, prev.MsgBlock(), h-1,
-			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+			legacySubsidy(h, params)-1, params.PowLimitBits, nil)
 		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 			t.Fatalf("side chain block %d: %v", h, err)
 		}
@@ -623,7 +623,7 @@ func TestInvalidateSideBlock(t *testing.T) {
 	// More work on the invalid side chain doesn't make it the main chain.
 	for h := int32(5); h <= 6; h++ {
 		block := procTestBlock(t, prev.MsgBlock(), h-1,
-			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+			legacySubsidy(h, params)-1, params.PowLimitBits, nil)
 		_, _, _ = chain.ProcessBlock(block, BFNone)
 		prev = block
 	}
@@ -659,7 +659,7 @@ func TestAddHeaderSnapshot(t *testing.T) {
 
 	prev := blocks[5].MsgBlock()
 	for h := int32(6); h <= 25; h++ {
-		block := procTestBlock(t, prev, h-1, CalcBlockSubsidy(h, params),
+		block := procTestBlock(t, prev, h-1, legacySubsidy(h, params),
 			params.PowLimitBits, nil)
 		if err := chain.AddHeader(&block.MsgBlock().Header); err != nil {
 			t.Fatal(err)
@@ -683,7 +683,7 @@ func TestReconsiderKeepsNode(t *testing.T) {
 
 	// A side chain from block 4.
 	side := procTestBlock(t, blocks[4].MsgBlock(), 4,
-		CalcBlockSubsidy(5, params)-1, params.PowLimitBits, nil)
+		legacySubsidy(5, params)-1, params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(side, BFNone); err != nil {
 		t.Fatal(err)
 	}
@@ -697,7 +697,7 @@ func TestReconsiderKeepsNode(t *testing.T) {
 
 	// The side chain takes over.
 	next := procTestBlock(t, side.MsgBlock(), 5,
-		CalcBlockSubsidy(6, params)-1, params.PowLimitBits, nil)
+		legacySubsidy(6, params)-1, params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(next, BFNone); err != nil {
 		t.Fatal(err)
 	}
@@ -738,7 +738,7 @@ func TestReconsiderRestoresChain(t *testing.T) {
 		}
 	}
 	next := procTestBlock(t, blocks[5].MsgBlock(), 5,
-		CalcBlockSubsidy(6, params), params.PowLimitBits, nil)
+		legacySubsidy(6, params), params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(next, BFNone); err != nil {
 		t.Fatalf("the next block: %v", err)
 	}
@@ -756,7 +756,7 @@ func TestReconsiderDescendant(t *testing.T) {
 	var side []*bchutil.Block
 	for h := int32(3); h <= 4; h++ {
 		block := procTestBlock(t, prev.MsgBlock(), h-1,
-			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+			legacySubsidy(h, params)-1, params.PowLimitBits, nil)
 		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 			t.Fatalf("side chain block %d: %v", h, err)
 		}

@@ -107,16 +107,30 @@ type blockNode struct {
 	// blockIndex once the node has been added to the global index.
 	status blockStatus
 
+	// nextInterval is the target interval, in ticks, of the block's
+	// children: 60 once the upgrade to 1-minute blocks applies after this
+	// block, else 600.  It fits in the padding.
+	nextInterval uint16
+
 	// received is when the block was received, in unix seconds, or zero
 	// for blocks loaded from the database.  It fits in the padding.
 	received uint32
+
+	// ticks is the sum of the target intervals of the blocks up to and
+	// including this one, zero for the genesis block.  Like nextInterval,
+	// it is computed when the node is created and never stored.
+	ticks int64
 }
 
 // initBlockNode initializes a block node from the given header and parent node,
-// calculating the height and workSum from the respective fields on the parent.
-// This function is NOT safe for concurrent access.  It must only be called when
-// initially creating a node.
-func initBlockNode(node *blockNode, blockHeader *wire.BlockHeader, parent *blockNode) {
+// calculating the height, workSum and ticks from the respective fields on the
+// parent.  The upgrade to 1-minute blocks applies to the children of the node
+// once its median time past reaches upgrade2027Time.  This function is NOT
+// safe for concurrent access.  It must only be called when initially creating
+// a node.
+func initBlockNode(node *blockNode, blockHeader *wire.BlockHeader, parent *blockNode,
+	upgrade2027Time uint64) {
+
 	*node = blockNode{
 		hash:       blockHeader.BlockHash(),
 		workSum:    CalcWork(blockHeader.Bits),
@@ -131,15 +145,22 @@ func initBlockNode(node *blockNode, blockHeader *wire.BlockHeader, parent *block
 		node.height = parent.height + 1
 		node.workSum = node.workSum.Add(parent.workSum, node.workSum)
 		node.skip = parent.Ancestor(skipHeight(node.height))
+		node.ticks = parent.ticks + int64(parent.nextInterval)
+	}
+	node.nextInterval = legacyBlockInterval
+	if upgrade2027Active(node.pastMedianTime(), upgrade2027Time) {
+		node.nextInterval = upgrade2027BlockInterval
 	}
 }
 
 // newBlockNode returns a new block node for the given block header and parent
-// node, calculating the height and workSum from the respective fields on the
-// parent. This function is NOT safe for concurrent access.
-func newBlockNode(blockHeader *wire.BlockHeader, parent *blockNode) *blockNode {
+// node, calculating the height, workSum and ticks from the respective fields on
+// the parent. This function is NOT safe for concurrent access.
+func newBlockNode(blockHeader *wire.BlockHeader, parent *blockNode,
+	upgrade2027Time uint64) *blockNode {
+
 	var node blockNode
-	initBlockNode(&node, blockHeader, parent)
+	initBlockNode(&node, blockHeader, parent, upgrade2027Time)
 	return &node
 }
 
@@ -259,6 +280,25 @@ func (node *blockNode) CalcPastMedianTime() time.Time {
 	// even number, this code will be wrong.
 	medianTimestamp := timestamps[numNodes/2]
 	return time.Unix(medianTimestamp, 0)
+}
+
+// pastMedianTime returns the same median time as CalcPastMedianTime, as a
+// unix timestamp, without allocating.
+func (node *blockNode) pastMedianTime() int64 {
+	var timestamps [medianTimeBlocks]int64
+	numNodes := 0
+	for n := node; numNodes < medianTimeBlocks && n != nil; n = n.parent {
+		// Insertion sort.
+		ts := n.timestamp
+		i := numNodes
+		for i > 0 && timestamps[i-1] > ts {
+			timestamps[i] = timestamps[i-1]
+			i--
+		}
+		timestamps[i] = ts
+		numNodes++
+	}
+	return timestamps[numNodes/2]
 }
 
 // blockIndex provides facilities for keeping track of an in-memory index of the

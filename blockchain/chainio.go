@@ -102,6 +102,11 @@ var (
 	// height at which the blockchain is pruned.
 	pruneHeightKeyName = []byte("pruneheight")
 
+	// upgrade2027TimeKeyName is the name of the db key used to store the
+	// activation time of the upgrade to 1-minute blocks that the block
+	// index was validated with.
+	upgrade2027TimeKeyName = []byte("upgrade2027activationtime")
+
 	// byteOrder is the preferred byte order used for serializing numeric
 	// fields for storage in the database.
 	byteOrder = binary.LittleEndian
@@ -1323,6 +1328,77 @@ func dbFetchPruneHeight(dbTx database.Tx) uint32 {
 	return byteOrder.Uint32(serialized)
 }
 
+// dbFetchUpgrade2027Time returns the activation time of the upgrade to
+// 1-minute blocks stored in the database, and false when there is none.
+func dbFetchUpgrade2027Time(dbTx database.Tx) (uint64, bool, error) {
+	serialized := dbTx.Metadata().Get(upgrade2027TimeKeyName)
+	if serialized == nil {
+		return 0, false, nil
+	}
+	if len(serialized) != 8 {
+		return 0, false, AssertError(fmt.Sprintf("dbFetchUpgrade2027Time: "+
+			"stored activation time has %d bytes", len(serialized)))
+	}
+	return byteOrder.Uint64(serialized), true, nil
+}
+
+// upgrade2027TimeReached returns whether a block of the index has reached the
+// passed activation time of the upgrade to 1-minute blocks.  The median time
+// past of a branch never decreases, so a block whose median time past is below
+// the time had its status set under the same rules as with any later time.
+//
+// This function MUST be called with the block index loaded and before the
+// chain is used.
+func (b *BlockChain) upgrade2027TimeReached(activationTime uint64) bool {
+	for _, node := range b.index.index {
+		medianTime := node.CalcPastMedianTime().Unix()
+		if upgrade2027Active(medianTime, activationTime) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkUpgrade2027Time stores the activation time of the upgrade to 1-minute
+// blocks in effect, or refuses it when blocks of the index were validated with
+// another one that already changed their rules.  The block statuses stored in
+// the index depend on it.
+//
+// This function MUST be called with the block index loaded and before the
+// chain is used.
+func (b *BlockChain) checkUpgrade2027Time() error {
+	return b.db.Update(func(dbTx database.Tx) error {
+		stored, ok, err := dbFetchUpgrade2027Time(dbTx)
+		if err != nil {
+			return err
+		}
+		effective := b.upgrade2027ActivationTime
+		if ok && stored == effective {
+			return nil
+		}
+		if ok && b.upgrade2027TimeReached(min(stored, effective)) {
+			hint := fmt.Sprintf("start bchd with "+
+				"--upgrade2027activationtime=%d", stored)
+			if stored == b.chainParams.Upgrade2027ActivationTime {
+				hint = "start bchd without " +
+					"--upgrade2027activationtime"
+			}
+			return fmt.Errorf("the database has blocks validated "+
+				"with upgrade 2027 activation time %d, but %d is "+
+				"in effect -- %s or use a fresh data directory",
+				stored, effective, hint)
+		}
+		if ok {
+			log.Infof("Upgrade 2027 activation time changed from %d "+
+				"to %d before any block reached either", stored,
+				effective)
+		}
+		buf := make([]byte, 8)
+		byteOrder.PutUint64(buf, effective)
+		return dbTx.Metadata().Put(upgrade2027TimeKeyName, buf)
+	})
+}
+
 // createChainState initializes both the database and the chain state to the
 // genesis block.  This includes creating the necessary buckets and inserting
 // the genesis block, so it must only be called on an uninitialized database.
@@ -1331,7 +1407,7 @@ func (b *BlockChain) createChainState() error {
 	genesisBlock := bchutil.NewBlock(b.chainParams.GenesisBlock)
 	genesisBlock.SetHeight(0)
 	header := &genesisBlock.MsgBlock().Header
-	node := newBlockNode(header, nil)
+	node := newBlockNode(header, nil, b.upgrade2027ActivationTime)
 	node.status = statusDataStored | statusValid
 	b.bestChain.SetTip(node)
 
@@ -1342,8 +1418,8 @@ func (b *BlockChain) createChainState() error {
 	// genesis block, use its timestamp for the median time.
 	numTxns := uint64(len(genesisBlock.MsgBlock().Transactions))
 	blockSize := uint64(genesisBlock.MsgBlock().SerializeSize())
-	b.stateSnapshot = newBestState(node, blockSize, numTxns,
-		numTxns, time.Unix(node.timestamp, 0))
+	b.stateSnapshot = newBestState(node, b.tickSchedule(node), blockSize,
+		numTxns, numTxns, time.Unix(node.timestamp, 0))
 
 	// Create the initial the database chain state including creating the
 	// necessary index buckets and inserting the genesis block.
@@ -1450,6 +1526,9 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 		if err := b.createChainState(); err != nil {
 			return err
 		}
+		if err := b.checkUpgrade2027Time(); err != nil {
+			return err
+		}
 		return b.initABLAState()
 	}
 
@@ -1518,7 +1597,8 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 			// Initialize the block node for the block, connect it,
 			// and add it to the block index.
 			node := new(blockNode)
-			initBlockNode(node, header, parent)
+			initBlockNode(node, header, parent,
+				b.upgrade2027ActivationTime)
 			node.status = status
 			b.index.addNode(node)
 
@@ -1572,12 +1652,18 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 		// Initialize the state related to the best block.
 		blockSize := uint64(len(blockBytes))
 		numTxns := uint64(len(block.Transactions))
-		b.stateSnapshot = newBestState(tip, blockSize, numTxns,
-			state.totalTxns, tip.CalcPastMedianTime())
+		b.stateSnapshot = newBestState(tip, b.tickSchedule(tip), blockSize,
+			numTxns, state.totalTxns, tip.CalcPastMedianTime())
 
 		return nil
 	})
 	if err != nil {
+		return err
+	}
+
+	// The loaded block nodes took their intervals from the time in effect,
+	// so they match the stored statuses once the check passes.
+	if err := b.checkUpgrade2027Time(); err != nil {
 		return err
 	}
 

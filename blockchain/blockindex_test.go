@@ -7,6 +7,7 @@ package blockchain
 import (
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/wire"
 )
@@ -41,7 +42,8 @@ func randomTree(rng *rand.Rand, numNodes int) []*blockNode {
 		if parent != nil {
 			header.PrevBlock = parent.hash
 		}
-		nodes = append(nodes, newBlockNode(&header, parent))
+		nodes = append(nodes, newBlockNode(&header, parent,
+			upgrade2027Never))
 	}
 	return nodes
 }
@@ -109,5 +111,49 @@ func BenchmarkAncestor(b *testing.B) {
 		if tip.Ancestor(int32(i%1000)) == nil {
 			b.Fatal("no ancestor")
 		}
+	}
+}
+
+// TestPastMedianTime ensures the median time past initBlockNode computes is
+// the one CalcPastMedianTime returns, on short chains and with timestamps out
+// of order.
+func TestPastMedianTime(t *testing.T) {
+	t.Parallel()
+
+	rng := rand.New(rand.NewSource(1))
+	nodes := randomTree(rng, 5000)
+	for _, node := range nodes {
+		node.timestamp = 1700000000 + rng.Int63n(20) - 10 +
+			int64(node.height)*rng.Int63n(1200)
+	}
+	for _, node := range nodes {
+		want := node.CalcPastMedianTime().Unix()
+		if got := node.pastMedianTime(); got != want {
+			t.Fatalf("node at height %d: median time past %d, want %d",
+				node.height, got, want)
+		}
+	}
+}
+
+// BenchmarkInitBlockNode measures creating a node of the block index as the
+// index is loaded, on a chain of jittered timestamps.
+func BenchmarkInitBlockNode(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	headers := make([]wire.BlockHeader, 1<<16)
+	ts := time.Unix(1700000000, 0)
+	for i := range headers {
+		ts = ts.Add(time.Duration(rng.Intn(1300)-100) * time.Second)
+		headers[i] = wire.BlockHeader{Nonce: uint32(i), Timestamp: ts}
+	}
+	nodes := make([]blockNode, len(headers))
+	activation := uint64(ts.Unix())
+	b.ReportAllocs()
+	for i := 0; b.Loop(); i++ {
+		j := i % len(nodes)
+		var parent *blockNode
+		if j > 0 {
+			parent = &nodes[j-1]
+		}
+		initBlockNode(&nodes[j], &headers[j], parent, activation)
 	}
 }

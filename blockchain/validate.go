@@ -43,8 +43,14 @@ const (
 	serializedHeightVersion = 2
 
 	// baseSubsidy is the starting subsidy amount for mined blocks.  This
-	// value is halved every SubsidyHalvingInterval blocks.
+	// value is halved every SubsidyReductionInterval chunks of 600 ticks.
 	baseSubsidy = 50 * bchutil.SatoshiPerBitcoin
+
+	// lockTimeUnitTicks is the number of ticks in one unit of a
+	// height-based lock time or relative lock, and in one block of the
+	// coinbase maturity.  It stays 600 when blocks become shorter, so a
+	// lock never releases earlier than it did before.
+	lockTimeUnitTicks = legacyBlockInterval
 
 	// LegacyMaxBlockSize is the maximum number of bytes allowed in a block
 	// prior to the August 1st, 2018 UAHF hardfork
@@ -69,6 +75,19 @@ const (
 
 	// MaxTransactionSigChecks is the maximum number of sig checks per transaction.
 	MaxTransactionSigChecks = 3000
+
+	// forbiddenCoinbaseValue is the least a coinbase of the forbidden shape
+	// pays: the least any coinbase before BIP0034 could repeat paid.
+	forbiddenCoinbaseValue = 25 * bchutil.SatoshiPerBitcoin
+
+	// coinbaseShapeMainnetHeight is the first mainnet height at which the
+	// forbidden coinbase shape rule applies.
+	coinbaseShapeMainnetHeight = 3708179
+
+	// coinbaseBanHeight is the mainnet height at which the coinbase of
+	// block 164384 could appear again, as its script starts with a push of
+	// that height.
+	coinbaseBanHeight = 1983702
 )
 
 var (
@@ -86,19 +105,25 @@ var (
 	// set forth in BIP0030.  It is defined as a package level variable to
 	// avoid the need to create a new instance every time a check is needed.
 	block91880Hash = newHashFromStr("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
+
+	// bannedCoinbaseHash is the coinbase of block 164384, which is invalid
+	// at coinbaseBanHeight on mainnet.
+	bannedCoinbaseHash = newHashFromStr("3aa03753fc238b38f4db9e5889362f3a6f0900d602baa8c9a7e789cb13ca1462")
 )
 
 // MaxBlockSize returns the is the maximum number of bytes allowed in
-// a block. If the UAHF hardfork is active the returned value is the
-// network's floor of the block size limit, see networkSizeFloor, or with ABLA
-// active the limit after the tip when that is larger. Otherwise it's the
-// legacy blocksize.
+// the block after the tip. If the UAHF hardfork is active the returned value
+// is the network's floor of the block size limit, see networkSizeFloor, or
+// with ABLA active the limit after the tip when that is larger, both scaled
+// to the interval of the block. Otherwise it's the legacy blocksize.
 func (b *BlockChain) MaxBlockSize(uahfActive bool, ablaActive bool) uint64 {
 	if uahfActive {
+		interval := nextBlockInterval(b.bestChain.Tip())
+		floor := scaleSizeFloor(b.networkSizeFloor(), interval)
 		if !ablaActive {
-			return b.networkSizeFloor()
+			return floor
 		} else {
-			return max(b.networkSizeFloor(), b.ablaState.getBlockSizeLimit())
+			return max(floor, b.ablaState.blockSizeLimitAt(interval))
 		}
 	}
 	return LegacyMaxBlockSize
@@ -159,24 +184,30 @@ func IsCoinBase(tx *bchutil.Tx) bool {
 }
 
 // SequenceLockActive determines if a transaction's sequence locks have been
-// met, meaning that all the inputs of a given transaction have reached a
-// height or time sufficient for their relative lock-time maturity.
-func SequenceLockActive(sequenceLock *SequenceLock, blockHeight int32,
+// met in a block with the passed ticks, meaning that all the inputs of a
+// given transaction have reached a tick or time sufficient for their relative
+// lock-time maturity.
+func SequenceLockActive(sequenceLock *SequenceLock, blockTicks int64,
 	medianTimePast time.Time) bool {
 
-	// If either the seconds, or height relative-lock time has not yet
+	// If either the seconds, or tick relative-lock time has not yet
 	// reached, then the transaction is not yet mature according to its
 	// sequence locks.
 	if sequenceLock.Seconds >= medianTimePast.Unix() ||
-		sequenceLock.BlockHeight >= blockHeight {
+		sequenceLock.BlockTicks >= blockTicks {
 		return false
 	}
 
 	return true
 }
 
-// IsFinalizedTransaction determines whether or not a transaction is finalized.
-func IsFinalizedTransaction(tx *bchutil.Tx, blockHeight int32, blockTime time.Time) bool {
+// IsFinalizedTransaction determines whether or not a transaction is finalized
+// in a block with the passed ticks and time.  A height-based lock time counts
+// units of 600 ticks.  Once the upgrade to 1-minute blocks applies to the
+// block, a coinbase is always final.
+func IsFinalizedTransaction(tx *bchutil.Tx, blockTicks int64,
+	blockTime time.Time, upgrade2027Active bool) bool {
+
 	msgTx := tx.MsgTx()
 
 	// Lock time of zero means the transaction is finalized.
@@ -189,13 +220,18 @@ func IsFinalizedTransaction(tx *bchutil.Tx, blockHeight int32, blockTime time.Ti
 	// which the transaction is finalized or a timestamp depending on if the
 	// value is before the txscript.LockTimeThreshold.  When it is under the
 	// threshold it is a block height.
-	var blockTimeOrHeight int64
 	if lockTime < txscript.LockTimeThreshold {
-		blockTimeOrHeight = int64(blockHeight)
-	} else {
-		blockTimeOrHeight = blockTime.Unix()
+		if int64(lockTime)*lockTimeUnitTicks < blockTicks {
+			return true
+		}
+	} else if int64(lockTime) < blockTime.Unix() {
+		return true
 	}
-	if int64(lockTime) < blockTimeOrHeight {
+
+	// Once 1-minute blocks apply a coinbase is final whatever its lock
+	// time and sequences, as a lock time set to the height would otherwise
+	// lock it.
+	if upgrade2027Active && IsCoinBase(tx) {
 		return true
 	}
 
@@ -225,23 +261,29 @@ func isBIP0030Node(node *blockNode) bool {
 	return false
 }
 
-// CalcBlockSubsidy returns the subsidy amount a block at the provided height
-// should have. This is mainly used for determining how much the coinbase for
-// newly generated blocks awards as well as validating the coinbase for blocks
-// has the expected value.
+// CalcBlockSubsidy returns the subsidy amount of a block with the passed
+// ticks and target interval in ticks.  This is mainly used for determining how
+// much the coinbase for newly generated blocks awards as well as validating
+// the coinbase for blocks has the expected value.
 //
-// The subsidy is halved every SubsidyReductionInterval blocks.  Mathematically
-// this is: baseSubsidy / 2^(height/SubsidyReductionInterval)
+// The subsidy is halved every SubsidyReductionInterval chunks of 600 ticks,
+// which is approximately every 4 years, and scaled by the interval:
+// (baseSubsidy >> (ceil(ticks/600) / SubsidyReductionInterval)) * interval / 600
 //
-// At the target block generation rate for the main network, this is
-// approximately every 4 years.
-func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
-	if chainParams.SubsidyReductionInterval == 0 {
-		return baseSubsidy
+// The halving count follows the 600-tick chunk the block's interval lies in,
+// so halvings stay on the boundaries of 10-minute blocks.  Halving before the
+// scaling is part of the rule, and so is the truncation it leaves.  The
+// interval must divide 600.
+func CalcBlockSubsidy(ticks, interval int64, chainParams *chaincfg.Params) int64 {
+	var halvings int64
+	if chainParams.SubsidyReductionInterval != 0 {
+		chunk := (ticks + legacyBlockInterval - 1) / legacyBlockInterval
+		halvings = chunk / int64(chainParams.SubsidyReductionInterval)
 	}
-
-	// Equivalent to: baseSubsidy / 2^(height/subsidyHalvingInterval)
-	return baseSubsidy >> uint(height/chainParams.SubsidyReductionInterval)
+	if halvings >= 64 {
+		return 0
+	}
+	return (baseSubsidy >> uint(halvings)) * interval / legacyBlockInterval
 }
 
 // CheckTransactionSanity performs some preliminary checks on a transaction to
@@ -703,6 +745,11 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 		alg := b.SelectDifficultyAdjustmentAlgorithm(prevNode)
 		expectedDifficulty, err := b.calcNextRequiredDifficulty(prevNode,
 			header.Timestamp, alg)
+		if err == errAsertAnchorTicks {
+			str := fmt.Sprintf("no difficulty for the block after "+
+				"height %d: %v", prevNode.height, err)
+			return ruleError(ErrUnexpectedDifficulty, str)
+		}
 		if err != nil {
 			return err
 		}
@@ -775,7 +822,8 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 //
 // The flags modify the behavior of this function as follows:
 //   - BFFastAdd: The transactions are not checked to see if they are finalized
-//     and the somewhat expensive BIP0034 validation is not performed.
+//     and the somewhat expensive BIP0034 validation and the coinbase shape
+//     check are not performed.
 //
 // The flags are also passed to checkBlockHeaderContext.  See its documentation
 // for how the flags modify its behavior.
@@ -861,11 +909,13 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 		// The height of this block is one more than the referenced
 		// previous block.
 		blockHeight := prevNode.height + 1
+		blockTicks := prevNode.ticks + int64(prevNode.nextInterval)
+		upgrade2027Active := isUpgrade2027Active(prevNode)
 
 		// Ensure all transactions in the block are finalized.
 		for _, tx := range block.Transactions() {
-			if !IsFinalizedTransaction(tx, blockHeight,
-				blockTime) {
+			if !IsFinalizedTransaction(tx, blockTicks, blockTime,
+				upgrade2027Active) {
 
 				str := fmt.Sprintf("block contains unfinalized "+
 					"transaction %v", tx.Hash())
@@ -885,6 +935,12 @@ func (b *BlockChain) checkBlockContext(block *bchutil.Block, prevNode *blockNode
 			if err != nil {
 				return err
 			}
+		}
+
+		err = checkCoinbaseShape(b.chainParams,
+			block.Transactions()[0], blockHeight, upgrade2027Active)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -917,6 +973,59 @@ func checkCoinbaseTokens(tx *bchutil.Tx) error {
 		}
 	}
 	return nil
+}
+
+// hasForbiddenCoinbaseShape returns whether the coinbase transaction has
+// version 1, lock time 0, a final input sequence and outputs worth at least
+// forbiddenCoinbaseValue, the shape of the coinbases from before BIP0034 that
+// a later coinbase could repeat.
+func hasForbiddenCoinbaseShape(tx *wire.MsgTx) bool {
+	if tx.Version != 1 || tx.LockTime != 0 ||
+		tx.TxIn[0].Sequence != wire.MaxTxInSequenceNum {
+
+		return false
+	}
+	var total int64
+	for _, txOut := range tx.TxOut {
+		total += txOut.Value
+	}
+	return total >= forbiddenCoinbaseValue
+}
+
+// coinbaseShapeExempt returns whether the coinbase with the passed hash at the
+// given height is exempt from the forbidden shape rule.  Networks with the
+// exemption apply the rule from coinbaseShapeMainnetHeight, and before it only
+// reject the coinbase of block 164384 at the one height it could appear again.
+func coinbaseShapeExempt(params *chaincfg.Params, hash *chainhash.Hash,
+	height int32) bool {
+
+	if !params.CoinbaseShapeExemption ||
+		height >= coinbaseShapeMainnetHeight {
+
+		return false
+	}
+	if height == coinbaseBanHeight {
+		return !hash.IsEqual(bannedCoinbaseHash)
+	}
+	return true
+}
+
+// checkCoinbaseShape ensures a coinbase does not have the forbidden shape once
+// the 2027 upgrade applies, so it cannot repeat the hash of a coinbase from
+// before BIP0034.  The upgrade applies from the block after the activation
+// block.
+func checkCoinbaseShape(params *chaincfg.Params, tx *bchutil.Tx,
+	height int32, upgrade2027Active bool) error {
+
+	if !upgrade2027Active || !hasForbiddenCoinbaseShape(tx.MsgTx()) ||
+		coinbaseShapeExempt(params, tx.Hash(), height) {
+
+		return nil
+	}
+	str := fmt.Sprintf("coinbase transaction %v has version 1, lock time "+
+		"0, a final sequence and pays at least %v", tx.Hash(),
+		bchutil.Amount(forbiddenCoinbaseValue))
+	return ruleError(ErrBadCoinbaseShape, str)
 }
 
 // checkBIP0030 ensures blocks do not contain duplicate transactions which
@@ -959,6 +1068,16 @@ func (b *BlockChain) checkBIP0030(block *bchutil.Block, view *UtxoViewpoint) err
 	return nil
 }
 
+// coinbaseMature returns whether a coinbase output created in a block with
+// coinTicks ticks has the passed maturity in a block with spendTicks ticks.
+func coinbaseMature(spendTicks, coinTicks, maturity int64) bool {
+	var depth int64
+	if spendTicks > coinTicks {
+		depth = spendTicks - coinTicks
+	}
+	return depth >= maturity
+}
+
 // CheckTransactionInputs performs a series of checks on the inputs to a
 // transaction to ensure they are valid.  An example of some of the checks
 // include verifying all inputs exist, ensuring the coinbase seasoning
@@ -968,9 +1087,12 @@ func (b *BlockChain) checkBIP0030(block *bchutil.Block, view *UtxoViewpoint) err
 // the bitcoins and therefore allowed to spend them.  As it checks the inputs,
 // it also calculates the total fees for the transaction and returns that value.
 //
+// The transaction is checked for the block the passed tick schedule was built
+// for, and the schedule maps the heights of the spent coins to ticks.
+//
 // NOTE: The transaction MUST have already been sanity checked with the
 // CheckTransactionSanity function prior to calling this function.
-func CheckTransactionInputs(tx *bchutil.Tx, txHeight int32, utxoView *UtxoViewpoint, chainParams *chaincfg.Params) (int64, error) {
+func CheckTransactionInputs(tx *bchutil.Tx, sched TickSchedule, utxoView *UtxoViewpoint, chainParams *chaincfg.Params) (int64, error) {
 	// Coinbase transactions have no inputs.
 	if IsCoinBase(tx) {
 		return 0, nil
@@ -997,15 +1119,18 @@ func CheckTransactionInputs(tx *bchutil.Tx, txHeight int32, utxoView *UtxoViewpo
 		// yet reached the required coinbase maturity.
 		if utxo.IsCoinBase() {
 			originHeight := utxo.BlockHeight()
-			blocksSincePrev := txHeight - originHeight
-			coinbaseMaturity := int32(chainParams.CoinbaseMaturity)
-			if blocksSincePrev < coinbaseMaturity {
+			originTicks := sched.CoinTicks(originHeight)
+			spendTicks := sched.NextBlockTicks()
+			maturity := int64(chainParams.CoinbaseMaturity) *
+				lockTimeUnitTicks
+			if !coinbaseMature(spendTicks, originTicks, maturity) {
 				str := fmt.Sprintf("tried to spend coinbase "+
 					"transaction output %v from height %v "+
-					"at height %v before required maturity "+
-					"of %v blocks", txIn.PreviousOutPoint,
-					originHeight, txHeight,
-					coinbaseMaturity)
+					"(tick %v) at height %v (tick %v) "+
+					"before required maturity of %v ticks",
+					txIn.PreviousOutPoint, originHeight,
+					originTicks, sched.NextHeight(),
+					spendTicks, maturity)
 				return 0, ruleError(ErrImmatureSpend, str)
 			}
 		}
@@ -1273,8 +1398,9 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	}
 
 	var totalFees int64
+	sched := b.tickSchedule(node.parent)
 	for _, tx := range transactions {
-		txFee, err := CheckTransactionInputs(tx, node.height, view, b.chainParams)
+		txFee, err := CheckTransactionInputs(tx, sched, view, b.chainParams)
 		if err != nil {
 			return err
 		}
@@ -1315,8 +1441,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 	for _, txOut := range transactions[0].MsgTx().TxOut {
 		totalSatoshiOut += txOut.Value
 	}
-	expectedSatoshiOut := CalcBlockSubsidy(node.height, b.chainParams) +
-		totalFees
+	expectedSatoshiOut := CalcBlockSubsidy(node.ticks, blockInterval(node),
+		b.chainParams) + totalFees
 	if totalSatoshiOut > expectedSatoshiOut {
 		str := fmt.Sprintf("coinbase transaction for block pays %v "+
 			"which is more than expected value of %v",
@@ -1365,7 +1491,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *bchutil.Block, vi
 			if err != nil {
 				return err
 			}
-			if !SequenceLockActive(sequenceLock, node.height,
+			if !SequenceLockActive(sequenceLock, node.ticks,
 				medianTime) {
 				str := fmt.Sprintf("block contains " +
 					"transaction whose input sequence " +
@@ -1445,6 +1571,6 @@ func (b *BlockChain) CheckConnectBlockTemplate(block *bchutil.Block) error {
 	// Leave the spent txouts entry nil in the state since the information
 	// is not needed and thus extra work can be avoided.
 	view := NewUtxoViewpoint()
-	newNode := newBlockNode(&header, tip)
+	newNode := newBlockNode(&header, tip, b.upgrade2027ActivationTime)
 	return b.checkConnectBlock(newNode, block, view, nil)
 }

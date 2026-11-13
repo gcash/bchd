@@ -1,0 +1,1622 @@
+{
+  "description": "ABLA (ticks variant) identity and edge-case vectors. These complement the abla_equiv-derived vectors in tests/abla/ (which pin statistical equivalence against 600s bases over long random sequences): every expected value here is a hand-derived golden pin, and the generator refuses to emit unless the reference reproduces every pin. Semantics: a state's (epsilon, beta) respond to the state's STORED blockSize and blockIntervalTime -- the block being responded to; NextBlockState(cfg, x, tau) stores (x, tau) in the returned state and drives the following transition, matching consensus where the limit for block N+1 reflects block N. The block size limit is (epsilon+beta) * tau / (600 * scalingFactor), a single muldiv truncation. Configs mirror BCHN chainparams.cpp: mainnet/regtest 32 MB dynamic, testnet3 32 MB fixed, testnet4 2 MB fixed, chipnet 2 MB dynamic, scalenet 256 MB dynamic, plus mainnet rates at INTERNAL_SCALING_FACTOR = 1000 (normative for the scaling behaviour only; results are NOT expected to agree across factors -- the s1000 vector documents a +1 byte output difference vs factor 1). Vectors flagged differential run the verbatim BCHN algorithm (abla_legacy) in lockstep at tau=600, factor 1, requiring bit-for-bit equal (epsilon, beta) and limit at every step -- the in-repo enforcement of the CHIP's requirement that the 600-tick, factor-1 case match the existing BCHN implementation; consumers MAY additionally cross-check those vectors against BCHN's published abla_test_vectors. The one_full_600/ten_full_60 pair pins the per-unit-time invariance claim as exact integers: identical epsilon, beta differing by exactly +1 internal unit (per-block decay truncation 10x42 vs one 421). The r_min / r_max / r_max_invariance / defense_50pct vectors pin the control function's rate identities (r_min = -gamma, r_max = gamma*(zeta-1) independent of the buffer state, and the 50% defense level where the downward rate equals r_max). The mainnet_cap_* and mainnet_maxima_* vectors pin the 2 GB cap boundary and the maxima / overflow edge (epsilonMax, betaMax, sum == maxSafe), where both std::min clips fire; the mainnet_maxima_tau60_pinned vector pins the tau-invariance of that fixed point, and mainnet_maxima_realblock contrasts the grow regime of a full uncapped block with the shrink regime of a real 2 GB block at the maxima. The min_step vectors pin the minimum detectable deviations (~101166 B grow, ~25292 B shrink), tau-invariant in internal units. The chipnet vectors document that the post-activation 200 KB floor is effectively frozen under sustained full blocks (~1 byte per full block of growth), which is intended behavior per the CHIP's Chain-Level Floors. The lookahead array pins the CLOSED-FORM upper bound, not the exact drive. The entry point takes `count` and `blockIntervalTime` and nothing else: there is no window constant and no separate download form, so a caller that thinks in ticks converts its own window to a count. It is O(1): one exact transition out of the tip (responding to the tip's own stored size and interval, which is what makes count == 1 exact), then a closed form over the remaining count - 1 full blocks at `blockIntervalTime`. With G = interval*(zeta - B7), D = 600*B7*gammaReciprocal and k the blocks beyond the first, a full block leaves a residual of (zeta-1)*eps, so eps_0*(1+G/D)^k, and AM-GM over k copies of (1+G/D) and one of (1-kG/D) gives s_k <= s_1 + (1+delta)*epsilon_1*k*G/(D - k*G) + k*(1+delta). The additive term is the per-step round-up: the buffer-dependent offset is floored and then subtracted, so a step can exceed eps*G/D by up to one internal unit, and (1+delta) times that reaches the sum. It would otherwise come up one byte low per k in corner-case configs; no deployed network reaches such a config (at zeta = 192 the offset's fractional part is at most 1/2), so the term costs a few tens of bytes of tightness and buys an unconditional bound. Bounding the SUM rather than the two components is what keeps the form valid once epsilon is pinned at epsilonMax, where the gear term keeps charging beta from the unclipped control step. The comparison target is BCHN's per-block loop, which steps every block of the requested span UNCONDITIONALLY -- no stopping rule, no clip-aware short cut. Past k*G >= D the summation has no closed equivalent and the entry point returns the trivial maximum epsilonMax + betaMax; that is a limit of the FORMULA (a clip only lowers a component), not a claim about the drive. Each row carries `expected` -- the bound, to be reproduced EXACTLY -- and `legacyExact` -- what the deployed drive returns, which no implementation may return less than (compare with >=). An implementation that keeps the exact drive can therefore verify the closed form against both numbers. On a shorter-interval chain the base-unit readback over-estimates the in-force limit by at least the base/next ratio (about 10x at a 60-tick target), so the bound fails open -- it can only size a download buffer too large. epsilonMax/betaMax per config and per-step after-states are reference-computed conveniences, not pins. All integer values are decimal strings.",
+  "constants": {
+    "BASE_BLOCK_INTERVAL_TIME": "600",
+    "MIN_BLOCK_INTERVAL_TIME": "1",
+    "MAX_BLOCK_INTERVAL_TIME": "600",
+    "MAX_BLOCK_SIZE": "2000000000",
+    "B7": "128",
+    "gammaReciprocal": "37938",
+    "zeta_xB7": "192",
+    "thetaReciprocal": "37938",
+    "delta": "10",
+    "mainnet_maxSafe": "12297829382473034368",
+    "mainnet_epsilonMax": "2837960626724546304",
+    "mainnet_betaMax": "9459868755748488064",
+    "lookahead_G": "38400",
+    "lookahead_D": "2913638400",
+    "lookahead_radius_600": "75876",
+    "lookahead_radius_60": "758760"
+  },
+  "configs": [
+    {
+      "name": "mainnet",
+      "defaultBlockSize": "32000000",
+      "fixedSize": false,
+      "scalingFactor": "1",
+      "epsilon0": "16000000",
+      "beta0": "16000000",
+      "epsilonMax": "2837960626724546304",
+      "betaMax": "9459868755748488064",
+      "isFixedSize": false,
+      "note": "chainparams.cpp: MakeDefault(32M, dynamic)"
+    },
+    {
+      "name": "testnet3",
+      "defaultBlockSize": "32000000",
+      "fixedSize": true,
+      "scalingFactor": "1",
+      "epsilon0": "16000000",
+      "beta0": "16000000",
+      "epsilonMax": "16000000",
+      "betaMax": "16000000",
+      "isFixedSize": true,
+      "note": "chainparams.cpp: MakeDefault(32M, fixed)"
+    },
+    {
+      "name": "testnet4",
+      "defaultBlockSize": "2000000",
+      "fixedSize": true,
+      "scalingFactor": "1",
+      "epsilon0": "1000000",
+      "beta0": "1000000",
+      "epsilonMax": "1000000",
+      "betaMax": "1000000",
+      "isFixedSize": true,
+      "note": "chainparams.cpp: MakeDefault(2M, fixed)"
+    },
+    {
+      "name": "chipnet",
+      "defaultBlockSize": "2000000",
+      "fixedSize": false,
+      "scalingFactor": "1",
+      "epsilon0": "1000000",
+      "beta0": "1000000",
+      "epsilonMax": "2837960626724546304",
+      "betaMax": "9459868755748488064",
+      "isFixedSize": false,
+      "note": "chainparams.cpp: MakeDefault(2M, dynamic)"
+    },
+    {
+      "name": "scalenet",
+      "defaultBlockSize": "256000000",
+      "fixedSize": false,
+      "scalingFactor": "1",
+      "epsilon0": "128000000",
+      "beta0": "128000000",
+      "epsilonMax": "2837960626724546304",
+      "betaMax": "9459868755748488064",
+      "isFixedSize": false,
+      "note": "chainparams.cpp: MakeDefault(256M, dynamic)"
+    },
+    {
+      "name": "regtest",
+      "defaultBlockSize": "32000000",
+      "fixedSize": false,
+      "scalingFactor": "1",
+      "epsilon0": "16000000",
+      "beta0": "16000000",
+      "epsilonMax": "2837960626724546304",
+      "betaMax": "9459868755748488064",
+      "isFixedSize": false,
+      "note": "chainparams.cpp: MakeDefault(32M, dynamic)"
+    },
+    {
+      "name": "mainnet_s1000",
+      "defaultBlockSize": "32000000",
+      "fixedSize": false,
+      "scalingFactor": "1000",
+      "epsilon0": "16000000000",
+      "beta0": "16000000000",
+      "epsilonMax": "2837960626724546304",
+      "betaMax": "9459868755748488064",
+      "isFixedSize": false,
+      "note": "mainnet rates with INTERNAL_SCALING_FACTOR=1000; epsilon0/beta0 re-derived as 16M * 1000 (internal scaled units, abla_cli convention). Normative for the scaling behaviour, not for this proposal's configuration (factor 1)"
+    }
+  ],
+  "configChecks": [
+    {
+      "name": "mainnet_base",
+      "config": "mainnet",
+      "expectFixedSize": false,
+      "expectBaseLimit": "32000000",
+      "expectFloorLimitTau60": "3200000",
+      "note": "base limit == nDefaultConsensusBlockSize; floor at tau=60 is epsilon0+beta0 scaled by 60/600"
+    },
+    {
+      "name": "testnet3_base",
+      "config": "testnet3",
+      "expectFixedSize": true,
+      "expectBaseLimit": "32000000",
+      "expectFloorLimitTau60": "3200000",
+      "note": "fixed-size does not change the output scaling"
+    },
+    {
+      "name": "testnet4_base",
+      "config": "testnet4",
+      "expectFixedSize": true,
+      "expectBaseLimit": "2000000",
+      "expectFloorLimitTau60": "200000",
+      "note": "post-activation testnet4 limit: 200 KB"
+    },
+    {
+      "name": "chipnet_base",
+      "config": "chipnet",
+      "expectFixedSize": false,
+      "expectBaseLimit": "2000000",
+      "expectFloorLimitTau60": "200000",
+      "note": "post-activation chipnet floor: 200 KB (the floor-state limit, not a cap; it grows under sustained load)"
+    },
+    {
+      "name": "scalenet_base",
+      "config": "scalenet",
+      "expectFixedSize": false,
+      "expectBaseLimit": "256000000",
+      "expectFloorLimitTau60": "25600000",
+      "note": "post-activation scalenet floor: 25.6 MB"
+    },
+    {
+      "name": "regtest_base",
+      "config": "regtest",
+      "expectFixedSize": false,
+      "expectBaseLimit": "32000000",
+      "expectFloorLimitTau60": "3200000",
+      "note": ""
+    },
+    {
+      "name": "mainnet_s1000_base",
+      "config": "mainnet_s1000",
+      "expectFixedSize": false,
+      "expectBaseLimit": "32000000",
+      "expectFloorLimitTau60": "3200000",
+      "note": "the scaling factor does not change the base limit: floor(32e9/1000) == 32M and floor(32e9/10000) == 3.2M, both exact"
+    }
+  ],
+  "limits": [
+    {
+      "name": "mainnet_tau_600",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "32000000",
+      "note": "muldiv(sum, 600, 600) is the identity"
+    },
+    {
+      "name": "mainnet_tau_300",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "300",
+      "disableCap": false,
+      "expected": "16000000",
+      "note": ""
+    },
+    {
+      "name": "mainnet_tau_150",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "150",
+      "disableCap": false,
+      "expected": "8000000",
+      "note": ""
+    },
+    {
+      "name": "mainnet_tau_100",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "100",
+      "disableCap": false,
+      "expected": "5333333",
+      "note": "32M/6 = 5333333.33 -> 5333333"
+    },
+    {
+      "name": "mainnet_tau_75",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "75",
+      "disableCap": false,
+      "expected": "4000000",
+      "note": ""
+    },
+    {
+      "name": "mainnet_tau_60",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "60",
+      "disableCap": false,
+      "expected": "3200000",
+      "note": "the post-activation mainnet floor"
+    },
+    {
+      "name": "mainnet_tau_30",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "30",
+      "disableCap": false,
+      "expected": "1600000",
+      "note": ""
+    },
+    {
+      "name": "mainnet_tau_10",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "10",
+      "disableCap": false,
+      "expected": "533333",
+      "note": ""
+    },
+    {
+      "name": "mainnet_tau_3",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "3",
+      "disableCap": false,
+      "expected": "160000",
+      "note": ""
+    },
+    {
+      "name": "mainnet_tau_1",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "1",
+      "disableCap": false,
+      "expected": "53333",
+      "note": ""
+    },
+    {
+      "name": "mainnet_cap_below",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "1983999999",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "1999999999",
+      "note": "sum = 1,999,999,999 one below the cap: not clamped"
+    },
+    {
+      "name": "mainnet_cap_at",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "1984000000",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "2000000000",
+      "note": "sum = 2,000,000,000 exactly = the cap: output equals the cap, still not clamped"
+    },
+    {
+      "name": "mainnet_cap_over",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "1984000001",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "2000000000",
+      "note": "sum = 2,000,000,001 one above: clamped to the cap"
+    },
+    {
+      "name": "mainnet_cap_far_off",
+      "config": "mainnet",
+      "epsilon": "16000000",
+      "beta": "2100000000",
+      "tau": "600",
+      "disableCap": true,
+      "expected": "2116000000",
+      "note": "far above the cap with the cap disabled: the full internal limit is returned"
+    },
+    {
+      "name": "mainnet_maxima_cap_off",
+      "config": "mainnet",
+      "epsilon": "2837960626724546304",
+      "beta": "9459868755748488064",
+      "tau": "600",
+      "disableCap": true,
+      "expected": "12297829382473034368",
+      "note": "sum == maxSafe; muldiv(sum, 600, 600) == sum. Exercised cap-off so the value is the full internal limit, not the 2 GB cap, and a debug build runs the muldiv asserts at the exact overflow boundary"
+    },
+    {
+      "name": "mainnet_maxima_cap_on",
+      "config": "mainnet",
+      "epsilon": "2837960626724546304",
+      "beta": "9459868755748488064",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "2000000000",
+      "note": "same state at the 2 GB cap"
+    },
+    {
+      "name": "mainnet_maxima_tau60_cap_off",
+      "config": "mainnet",
+      "epsilon": "2837960626724546304",
+      "beta": "9459868755748488064",
+      "tau": "60",
+      "disableCap": true,
+      "expected": "1229782938247303436",
+      "note": "floor(maxSafe / 10)"
+    },
+    {
+      "name": "chipnet_tau_600",
+      "config": "chipnet",
+      "epsilon": "1000000",
+      "beta": "1000000",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "2000000",
+      "note": ""
+    },
+    {
+      "name": "chipnet_tau_60",
+      "config": "chipnet",
+      "epsilon": "1000000",
+      "beta": "1000000",
+      "tau": "60",
+      "disableCap": false,
+      "expected": "200000",
+      "note": ""
+    },
+    {
+      "name": "testnet3_tau_600",
+      "config": "testnet3",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "32000000",
+      "note": ""
+    },
+    {
+      "name": "testnet3_tau_60",
+      "config": "testnet3",
+      "epsilon": "16000000",
+      "beta": "16000000",
+      "tau": "60",
+      "disableCap": false,
+      "expected": "3200000",
+      "note": "testnet3 is 32 MB fixed: 3.2 MB at 60 ticks"
+    },
+    {
+      "name": "testnet4_tau_600",
+      "config": "testnet4",
+      "epsilon": "1000000",
+      "beta": "1000000",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "2000000",
+      "note": ""
+    },
+    {
+      "name": "testnet4_tau_60",
+      "config": "testnet4",
+      "epsilon": "1000000",
+      "beta": "1000000",
+      "tau": "60",
+      "disableCap": false,
+      "expected": "200000",
+      "note": "testnet4 is 2 MB fixed: 200 KB at 60 ticks"
+    },
+    {
+      "name": "scalenet_tau_600",
+      "config": "scalenet",
+      "epsilon": "128000000",
+      "beta": "128000000",
+      "tau": "600",
+      "disableCap": false,
+      "expected": "256000000",
+      "note": ""
+    },
+    {
+      "name": "scalenet_tau_60",
+      "config": "scalenet",
+      "epsilon": "128000000",
+      "beta": "128000000",
+      "tau": "60",
+      "disableCap": false,
+      "expected": "25600000",
+      "note": "exact: 256M/10"
+    }
+  ],
+  "states": [
+    {
+      "name": "one_full_600",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "32000000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "32001889",
+          "tau": "600",
+          "after": {
+            "epsilon": "16000210",
+            "beta": "16001679",
+            "blocksizeLimit": "32001889"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000210",
+        "beta": "16001679",
+        "blocksizeLimit": "32001889"
+      },
+      "differential": true,
+      "note": "Single full 600-tick block from the floor state. amplified 48,000,000 (exact), bytesToAdd 32,000,000, offset 24,000,000 (exact), so step = floor(8M/37938) = 210 (210.93) and decay = floor(16M/37938) = 421 (421.86); beta add 210*10 = 2100. The only rounding is the two documented truncations. Limit at tau=60 would be floor(32,001,889/10) = 3,200,188."
+    },
+    {
+      "name": "ten_full_60",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "3200000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "60"
+      },
+      "steps": [
+        {
+          "blockSize": "3200000",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000021",
+            "beta": "16000168",
+            "blocksizeLimit": "3200018"
+          }
+        },
+        {
+          "blockSize": "3200018",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000042",
+            "beta": "16000336",
+            "blocksizeLimit": "3200037"
+          }
+        },
+        {
+          "blockSize": "3200037",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000063",
+            "beta": "16000504",
+            "blocksizeLimit": "3200056"
+          }
+        },
+        {
+          "blockSize": "3200056",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000084",
+            "beta": "16000672",
+            "blocksizeLimit": "3200075"
+          }
+        },
+        {
+          "blockSize": "3200075",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000105",
+            "beta": "16000840",
+            "blocksizeLimit": "3200094"
+          }
+        },
+        {
+          "blockSize": "3200094",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000126",
+            "beta": "16001008",
+            "blocksizeLimit": "3200113"
+          }
+        },
+        {
+          "blockSize": "3200113",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000147",
+            "beta": "16001176",
+            "blocksizeLimit": "3200132"
+          }
+        },
+        {
+          "blockSize": "3200132",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000168",
+            "beta": "16001344",
+            "blocksizeLimit": "3200151"
+          }
+        },
+        {
+          "blockSize": "3200151",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000189",
+            "beta": "16001512",
+            "blocksizeLimit": "3200170"
+          }
+        },
+        {
+          "blockSize": "3200170",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000210",
+            "beta": "16001680",
+            "blocksizeLimit": "3200189"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000210",
+        "beta": "16001680",
+        "blocksizeLimit": "3200189"
+      },
+      "differential": false,
+      "note": "The same total work split into ten full 60-tick blocks (sizes are the enumerated successive limits, so a wrong intermediate limit fails loudly). Every step is 21 (num ~8M/379380), every decay 42, every beta add 210, so beta gains 168/block. epsilon lands identically to the single 600-tick block (10*21 vs 210); beta differs by exactly +1 internal unit (10*42 = 420 of decay vs one 421) -- the discretization epsilon of the CHIP's per-unit-time invariance claim, pinned as an integer."
+    },
+    {
+      "name": "activation_boundary",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "32000000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "3200188",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000210",
+            "beta": "16001679",
+            "blocksizeLimit": "3200188"
+          }
+        },
+        {
+          "blockSize": "3200207",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000231",
+            "beta": "16001847",
+            "blocksizeLimit": "3200207"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000231",
+        "beta": "16001847",
+        "blocksizeLimit": "3200207"
+      },
+      "differential": false,
+      "note": "Full 600-tick tip, then full 60-tick blocks. Transition 1 responds to the tip at its own tau=600 (one_full_600's arithmetic); transition 2 responds to the first full 60-tick block at tau=60 (offset floor(24,002,518*32,002,610/32,002,623) = 24,002,508, num 8,000,102 -> step 21, decay 42). Internal state is continuous across the boundary; only the output limit rescales (32,002,078 at tau=600, 3,200,207 at tau=60)."
+    },
+    {
+      "name": "input_clamp_2x",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "64000000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "32001889",
+          "tau": "600",
+          "after": {
+            "epsilon": "16000210",
+            "beta": "16001679",
+            "blocksizeLimit": "32001889"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000210",
+        "beta": "16001679",
+        "blocksizeLimit": "32001889"
+      },
+      "differential": true,
+      "note": "A 2x-limit mined block is clamped to the limit before amplification, so the transition is identical to one_full_600's: out-of-bounds input cannot trigger out-of-bounds state transitions."
+    },
+    {
+      "name": "min_step_grow_600_miss",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "10767832",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "16000000",
+            "beta": "16000000",
+            "blocksizeLimit": "32000000"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "blocksizeLimit": "32000000"
+      },
+      "differential": true,
+      "note": "One byte below the grow-side minimum: amplified 16,151,748 (exact), bytesToAdd 151,748, offset 113,811 (exact), num 37,937 < gammaReciprocal -> step truncates to 0."
+    },
+    {
+      "name": "min_step_grow_600_hit",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "10767833",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "16000001",
+            "beta": "16000000",
+            "blocksizeLimit": "32000001"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000001",
+        "beta": "16000000",
+        "blocksizeLimit": "32000001"
+      },
+      "differential": true,
+      "note": "The grow-side minimum: amplified 16,151,749, bytesToAdd 151,749, offset 113,811, num exactly 37,938 = gammaReciprocal -> step 1. Deviation from the neutral point (10,666,666.67) is 101,166 B, pinning the CHIP's ~101,168 B closed form ('within a byte or two'). Beta's decay (421) exceeds the gear add (10) and clamps at the floor."
+    },
+    {
+      "name": "min_step_grow_60_miss",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "1167834",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "60"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000000",
+            "beta": "16000000",
+            "blocksizeLimit": "3200000"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "blocksizeLimit": "3200000"
+      },
+      "differential": false,
+      "note": "tau=60 twin of the miss: normalized input 15*1,167,834 = 17,517,510, bytesToAdd 1,517,510, offset 1,138,132, num 379,378 < 379,380 -> step 0."
+    },
+    {
+      "name": "min_step_grow_60_hit",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "1167835",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "60"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000001",
+            "beta": "16000000",
+            "blocksizeLimit": "3200000"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000001",
+        "beta": "16000000",
+        "blocksizeLimit": "3200000"
+      },
+      "differential": false,
+      "note": "Same minimum deviation at tau=60 (1,167,835 - 1,066,666.67 = 101,168.33 B; the 600-tick twin is 101,166.33 B, the 2-byte spread being the input-quantization grid at x1.5 vs x15). Input normalization (x600/tau) and rate scaling (xtau/600) cancel, so the step is tau-invariant in internal units. Note the output limit at tau=60 does not move (floor(32,000,001/10) = 3,200,000) even though epsilon did."
+    },
+    {
+      "name": "min_step_shrink_600_miss",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "10641516",
+        "epsilon": "16000210",
+        "beta": "16001679",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "16000210",
+            "beta": "16001258",
+            "blocksizeLimit": "32001468"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000210",
+        "beta": "16001258",
+        "blocksizeLimit": "32001468"
+      },
+      "differential": true,
+      "note": "Shrink from an elevated state -- the state landed by one_full_600 -- because shrink-from-floor is untestable: the max(eps - step, epsilon0) floor clamps epsilon from below, so the shrink boundary is only observable above the floor. amplified 15,962,274 (exact), bytesToRemove 37,936 < gammaReciprocal -> step truncates to 0, epsilon unchanged; beta still decays (421) to 16,001,258."
+    },
+    {
+      "name": "min_step_shrink_600_hit",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "10641515",
+        "epsilon": "16000210",
+        "beta": "16001679",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "16000209",
+            "beta": "16001258",
+            "blocksizeLimit": "32001467"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000209",
+        "beta": "16001258",
+        "blocksizeLimit": "32001467"
+      },
+      "differential": true,
+      "note": "One byte smaller and the truncation boundary is crossed: amplified floor(15,962,272.5) = 15,962,272, bytesToRemove exactly 37,938 = gammaReciprocal -> step 1. This is the LARGEST shrink-moving block size from this state (10,641,514 also moves, removal 37,939; 10,641,516 does not) -- the muldiv floor of 1.5*odd is what pins the boundary at an odd x. Deviation below the elevated neutral point (16,000,210/1.5 = 10,666,806.67) is 25,292 B, pinning the CHIP's shrink-direction closed form."
+    },
+    {
+      "name": "r_min_exact",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "0",
+        "epsilon": "18969000",
+        "beta": "18969000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "18968500",
+            "beta": "18968500",
+            "blocksizeLimit": "37937000"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "18968500",
+        "beta": "18968500",
+        "blocksizeLimit": "37937000"
+      },
+      "differential": true,
+      "note": "r(x=0) = -gamma, exactly. epsilon = 37938*500, so the shrink step is floor(epsilon/gammaReciprocal) = 500 and the rate is exactly 500/18,969,000 = 1/37,938. The state must sit above the floor to be observable: from the floor state the max(eps-step, epsilon0) clamp hides the step entirely."
+    },
+    {
+      "name": "r_max_exact_u1",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "32019672",
+        "epsilon": "16009836",
+        "beta": "16009836",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "16010047",
+            "beta": "16011524",
+            "blocksizeLimit": "32021571"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16010047",
+        "beta": "16011524",
+        "blocksizeLimit": "32021571"
+      },
+      "differential": true,
+      "note": "r(x=eps+beta) = gamma*(zeta-1), exactly. epsilon = 75876*211, so num = (zeta-1)*epsilon = 8,004,918 and step = floor(8,004,918/37,938) = 211; rate = 211/16,009,836 = 1/75,876. BytesToAdd == bytesMax (x is the limit), so the buffer-dependent offset cancels in integers."
+    },
+    {
+      "name": "r_max_invariance_u3",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "64039344",
+        "epsilon": "16009836",
+        "beta": "48029508",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "16010047",
+            "beta": "48030352",
+            "blocksizeLimit": "64040399"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16010047",
+        "beta": "48030352",
+        "blocksizeLimit": "64040399"
+      },
+      "differential": true,
+      "note": "The figure's headline: r_max is independent of the buffer state. Same epsilon as r_max_exact_u1, beta = 3*epsilon (u=3): num is still exactly 8,004,918 and the epsilon step is still 211. Only beta moves (decay 1,266 vs 422), because the cancellation above holds for every u. A consumer MUST expect the same epsilon step as r_max_exact_u1."
+    },
+    {
+      "name": "defense_50pct_exact",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "5336612",
+        "epsilon": "16009836",
+        "beta": "16009836",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "16009625",
+            "beta": "16009414",
+            "blocksizeLimit": "32019039"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16009625",
+        "beta": "16009414",
+        "blocksizeLimit": "32019039"
+      },
+      "differential": true,
+      "note": "The 50% defense level x = epsilon*(2-zeta)/zeta = epsilon/3 at zeta=1.5. bytesToRemove = epsilon - floor(zeta*x) = 8,004,918 = epsilon/2, so step = 211 and rate = 211/16,009,836 = gamma/2 = -gamma*(zeta-1): the downward correction at the 50% size equals the maximum upward rate, exactly. Note the step (211) equals r_max_exact_u1's -- a zeta=1.5 coincidence, since (zeta-1) = 1-zeta/3 = 1/2."
+    },
+    {
+      "name": "mainnet_saturation_fixed",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "12297829382473034368",
+        "epsilon": "2837960626724546304",
+        "beta": "9459868755748488064",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "12297829382473034368",
+          "tau": "600",
+          "after": {
+            "epsilon": "2837960626724546304",
+            "beta": "9459868755748488064",
+            "blocksizeLimit": "12297829382473034368"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "2837960626724546304",
+        "beta": "9459868755748488064",
+        "blocksizeLimit": "12297829382473034368"
+      },
+      "differential": true,
+      "note": "The (epsilonMax, betaMax) fixed point under full uncapped blocks. This is the overflow-boundary test -- the only place the maxSafe apparatus is exercised -- and it pins that both std::min clips hold, keeping epsilon+beta == maxSafe == 12,297,829,382,473,034,368 so muldiv(zeta_xB7, sum, B7) cannot exceed uint64. A block of size maxSafe clamps to its own scaledLimit, so bytesToAdd == bytesMax and the buffer offset cancels; the pre-clip step is positive on both epsilon and beta, so both clips fire. Reference note (not a pin): from the floor the dynamics reach this state in ~1,965,530 blocks at tau=600 (~19,671,284 at tau=60, i.e. exactly 10x -- the per-unit-time invariance), ratio settling to betaMax/epsilonMax = delta/3 = 3.33."
+    },
+    {
+      "name": "mainnet_maxima_realblock",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "2000000000",
+        "epsilon": "2837960626724546304",
+        "beta": "9459868755748488064",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "2000000000",
+          "tau": "600",
+          "after": {
+            "epsilon": "2837885821499607601",
+            "beta": "9459619404998428797",
+            "blocksizeLimit": "12297505226498036398"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "2837885821499607601",
+        "beta": "9459619404998428797",
+        "blocksizeLimit": "12297505226498036398"
+      },
+      "differential": true,
+      "note": "The contrasting regime: the same maxima state, but a REAL (2 GB-capped) block. amplified = 1.5*2GB = 3,000,000,000 << epsilonMax, so the shrink branch runs: epsilon -= floor((epsilonMax - 3e9)/37938) = 74,805,224,938,703 and beta -= floor(betaMax/37938) = 249,350,750,059,267. NOTE beta loses only the decay -- the gear term (eps_n - eps_{n-1})*delta exists only in the grow branch -- which is precisely the CHIP's 'beyond saturation a full block only drains the elastic buffer'. With the cap removed (previous vector) the same state stays pinned instead, because 1.5*maxSafe > epsilonMax puts it back in the grow branch. These are genuinely different regimes; pinning both documents the difference."
+    },
+    {
+      "name": "mainnet_maxima_tau60_pinned",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "1229782938247303436",
+        "epsilon": "2837960626724546304",
+        "beta": "9459868755748488064",
+        "tau": "60"
+      },
+      "steps": [
+        {
+          "blockSize": "1229782938247303436",
+          "tau": "60",
+          "after": {
+            "epsilon": "2837960626724546304",
+            "beta": "9459868755748488064",
+            "blocksizeLimit": "1229782938247303436"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "2837960626724546304",
+        "beta": "9459868755748488064",
+        "blocksizeLimit": "1229782938247303436"
+      },
+      "differential": false,
+      "note": "tau-invariance of the fixed point: from (epsilonMax, betaMax) at tau=60 with a full block stored (blockSize = floor(maxSafe/10) = 1,229,782,938,247,303,436), one full uncapped block leaves both clips holding. The full block grows because input normalization (x600/tau) maps it back to ~maxSafe, so amplified = 1.5*maxSafe > epsilonMax, and gear > decay keeps beta clipped at betaMax. Pins the tau-invariance of the clamp without the ~19.67M-step drive (which the reference note above records). No legacy differential: the contract requires every step at tau=600, and abla_legacy has no interval concept to compare against."
+    },
+    {
+      "name": "chipnet_full_600",
+      "config": "chipnet",
+      "initial": {
+        "blockSize": "2000000",
+        "epsilon": "1000000",
+        "beta": "1000000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "1000013",
+            "beta": "1000104",
+            "blocksizeLimit": "2000117"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "1000013",
+        "beta": "1000104",
+        "blocksizeLimit": "2000117"
+      },
+      "differential": true,
+      "note": "One full 2 MB block at tau=600 from chipnet's floor (epsilon0=beta0=1M). amplified 3,000,000, bytesToAdd 2,000,000, bytesMax 2,000,000, offset 1,500,000 -- all exact; step = floor(500,000/37,938) = 13 (13.18), decay = floor(1,000,000/37,938) = 26 (26.35), beta add 130. Next limit 2,000,117 at tau=600, 200,011 at tau=60."
+    },
+    {
+      "name": "chipnet_full_60",
+      "config": "chipnet",
+      "initial": {
+        "blockSize": "200000",
+        "epsilon": "1000000",
+        "beta": "1000000",
+        "tau": "60"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000001",
+            "beta": "1000008",
+            "blocksizeLimit": "200000"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "1000001",
+        "beta": "1000008",
+        "blocksizeLimit": "200000"
+      },
+      "differential": false,
+      "note": "One full 200 KB block at tau=60: input normalization (x600/tau) un-does the interval, so amplified/bytesToAdd/offset are identical to chipnet_full_600; only the rates scale (step floor(500,000/379,380) = 1, decay floor(1,000,000/379,380) = 2, beta add 10). Internal state grows by 9 units (eps+1, beta+8) yet the output limit does not move a single byte (floor(2,000,009/10) = 200,000) -- the sub-step invisibility the CHIP's INTERNAL_SCALING_FACTOR discussion warns about, pinned at the exact scale where it applies."
+    },
+    {
+      "name": "chipnet_ten_full_60",
+      "config": "chipnet",
+      "initial": {
+        "blockSize": "200000",
+        "epsilon": "1000000",
+        "beta": "1000000",
+        "tau": "60"
+      },
+      "steps": [
+        {
+          "blockSize": "200000",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000001",
+            "beta": "1000008",
+            "blocksizeLimit": "200000"
+          }
+        },
+        {
+          "blockSize": "200000",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000002",
+            "beta": "1000016",
+            "blocksizeLimit": "200001"
+          }
+        },
+        {
+          "blockSize": "200001",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000003",
+            "beta": "1000024",
+            "blocksizeLimit": "200002"
+          }
+        },
+        {
+          "blockSize": "200002",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000004",
+            "beta": "1000032",
+            "blocksizeLimit": "200003"
+          }
+        },
+        {
+          "blockSize": "200003",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000005",
+            "beta": "1000040",
+            "blocksizeLimit": "200004"
+          }
+        },
+        {
+          "blockSize": "200004",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000006",
+            "beta": "1000048",
+            "blocksizeLimit": "200005"
+          }
+        },
+        {
+          "blockSize": "200005",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000007",
+            "beta": "1000056",
+            "blocksizeLimit": "200006"
+          }
+        },
+        {
+          "blockSize": "200006",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000008",
+            "beta": "1000064",
+            "blocksizeLimit": "200007"
+          }
+        },
+        {
+          "blockSize": "200007",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000009",
+            "beta": "1000072",
+            "blocksizeLimit": "200008"
+          }
+        },
+        {
+          "blockSize": "200008",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000010",
+            "beta": "1000080",
+            "blocksizeLimit": "200009"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "1000010",
+        "beta": "1000080",
+        "blocksizeLimit": "200009"
+      },
+      "differential": false,
+      "note": "Ten full 60-tick blocks; sizes are the enumerated successive limits (each is floor((eps+beta)/10) after the previous transition; the first two coincide at 200,000), so a wrong intermediate limit fails loudly. Every transition: step 1, decay 2, beta add 10 -> +1 eps, +8 beta. After ten FULL blocks the limit has grown 200,000 -> 200,009: ~1 byte per full block, ~1.4 KB/day at sustained 100% fullness. Post-activation chipnet is effectively frozen at its 200 KB floor -- intended behavior per the CHIP's Chain-Level Floors, and the reason the full-block propagation stress test requires an ABLA config bump rather than patience."
+    },
+    {
+      "name": "testnet4_full_noop",
+      "config": "testnet4",
+      "initial": {
+        "blockSize": "200000",
+        "epsilon": "1000000",
+        "beta": "1000000",
+        "tau": "60"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "60",
+          "after": {
+            "epsilon": "1000000",
+            "beta": "1000000",
+            "blocksizeLimit": "200000"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "1000000",
+        "beta": "1000000",
+        "blocksizeLimit": "200000"
+      },
+      "differential": false,
+      "note": "Same MakeDefault(2M) as chipnet, one bool apart: the pre-clip computation is identical to chipnet_full_60 -- (1,000,001, 1,000,008) -- and the two configs diverge only at the final clip to the maxima (epsilonMax=epsilon0, betaMax=beta0). The minimal differential for what fixedSize does under ticks; pins the clip path specifically, which is the load-bearing part on fixed-size networks."
+    },
+    {
+      "name": "testnet3_full_noop",
+      "config": "testnet3",
+      "initial": {
+        "blockSize": "3200000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "60"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000000",
+            "beta": "16000000",
+            "blocksizeLimit": "3200000"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "blocksizeLimit": "3200000"
+      },
+      "differential": false,
+      "note": "The 32 MB fixed network's twin: pre-clip (16,000,021, 16,000,168) (step 21, decay 42, beta add 210 at tau=60), clipped to (16M, 16M); the limit is a constant 3.2 MB at 60 ticks."
+    },
+    {
+      "name": "scalenet_full_600",
+      "config": "scalenet",
+      "initial": {
+        "blockSize": "256000000",
+        "epsilon": "128000000",
+        "beta": "128000000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "600",
+          "after": {
+            "epsilon": "128001686",
+            "beta": "128013487",
+            "blocksizeLimit": "256015173"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "128001686",
+        "beta": "128013487",
+        "blocksizeLimit": "256015173"
+      },
+      "differential": true,
+      "note": "One full 256 MB block at tau=600: amplified 384M, bytesToAdd 256M, bytesMax 256M, offset 192M (all exact); step = floor(64M/37,938) = 1,686 (1,687.06), decay = floor(128M/37,938) = 3,373 (3,373.13), beta add 16,860."
+    },
+    {
+      "name": "mainnet_s1000_full_600",
+      "config": "mainnet_s1000",
+      "initial": {
+        "blockSize": "32000000",
+        "epsilon": "16000000000",
+        "beta": "16000000000",
+        "tau": "600"
+      },
+      "steps": [
+        {
+          "blockSize": "0",
+          "tau": "60",
+          "after": {
+            "epsilon": "16000210870",
+            "beta": "16001686960",
+            "blocksizeLimit": "3200189"
+          }
+        }
+      ],
+      "expected": {
+        "epsilon": "16000210870",
+        "beta": "16001686960",
+        "blocksizeLimit": "3200189"
+      },
+      "differential": false,
+      "note": "The one_full_600 scenario at INTERNAL_SCALING_FACTOR=1000: step = floor(8e9/37,938) = 210,870, decay = floor(16e9/37,938) = 421,740, beta add 2,108,700. The final state's limit at tau=60 is 3,200,189 versus factor 1's 3,200,188 for the same physical scenario: the +1 byte is the deliberate cross-factor non-agreement (the CHIP declares results are not required to agree across factors), pinned here so a future precision change has a regression guard already in place. Normative for the scaling behaviour, not for this proposal's configuration."
+    }
+  ],
+  "lookaheads": [
+    {
+      "name": "lookahead_count1",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "32000000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "blockIntervalTime": "600",
+      "count": "1",
+      "disableCap": true,
+      "expected": "32001889",
+      "legacyExact": "32001889",
+      "note": "count == 1 means k == 0, and the first (only) step is exact: the transition responds to the tip's stored full block -- one_full_600's arithmetic -- so bound and drive coincide. Pins that k == 0 degenerates to the exact value."
+    },
+    {
+      "name": "lookahead_count2",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "32000000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "blockIntervalTime": "600",
+      "count": "2",
+      "disableCap": true,
+      "expected": "32004219",
+      "legacyExact": "32003778",
+      "note": "count == 2 means one geometric step (k = 1). The exact first step leaves s_1 = 32,001,889, and the sum bound adds floor(11 * 16,000,210 * 38,400 / 2,913,600,000) = 2,319, plus k*(1+delta) = 11 of round-up, giving 32,004,219 against the drive's 32,003,778. The 441 of slack is the dropped 421 decay, 9 of flooring, and the 11 round-up."
+    },
+    {
+      "name": "lookahead_count12",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "32000000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "blockIntervalTime": "600",
+      "count": "12",
+      "disableCap": true,
+      "expected": "32027529",
+      "legacyExact": "32022662",
+      "note": "Twelve base-interval steps (a nominal two-hour window at a 600-tick cadence), so k = 11 and kG = 422,400. The exact first step leaves s_1 = 32,001,889, and the sum bound adds floor(11 * 16,000,210 * 422,400 / 2,913,216,000) = 25,519, plus k*(1+delta) = 121 of round-up, giving 32,027,529 against the drive's 32,022,662. The 4,867 of slack is eleven dropped decays (11 * 421 = 4,631), 115 of flooring, and the 121 round-up: 0.0152%."
+    },
+    {
+      "name": "lookahead_ten_at_60",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "3200000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "60"
+      },
+      "blockIntervalTime": "60",
+      "count": "10",
+      "disableCap": true,
+      "expected": "3200237",
+      "legacyExact": "3200189",
+      "note": "The same form at interval 60, which is why G must scale with the driven interval: G = 60*(192-128) = 3,840, not 38,400, so D/G is 758,760 rather than 75,876. The exact first step leaves s_1 = 32,000,189 and k = 9, so the bound adds floor(11 * 16,000,021 * 34,560 / 2,913,603,840) = 2,087 plus k*(1+delta) = 99 of round-up, giving 32,002,375 and, read back at 60, floor(32,002,375 / 10) = 3,200,237 against the drive's 3,200,189. The 48 of slack is 9 dropped decays of 42, 8 of flooring and the 99 round-up, already divided by 10."
+    },
+    {
+      "name": "lookahead_empty_tip",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "0",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600"
+      },
+      "blockIntervalTime": "600",
+      "count": "1",
+      "disableCap": true,
+      "expected": "32000000",
+      "legacyExact": "32000000",
+      "note": "One base-interval step from an empty 600-tick floor tip: the tip contributes no growth (amplified 0, shrink branch, clamped at the floor), so the first step is a no-op and k = 0 leaves (16M, 16M); the base-unit limit is 32,000,000."
+    },
+    {
+      "name": "lookahead_tip60_read_at_600",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "3200000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "60"
+      },
+      "blockIntervalTime": "600",
+      "count": "1",
+      "disableCap": true,
+      "expected": "32000189",
+      "legacyExact": "32000189",
+      "note": "A full 60-tick tip, one block, asked about at the 600-tick base interval. The exact first transition uses the tip's REAL size (3.2 MB) and REAL interval (60), so the state grows (step 21, decay 42, gear 210) to (16,000,021, 16,000,168); read back at 600 that is 32,000,189, about 10x the in-force 60-tick limit. The bound fails open."
+    },
+    {
+      "name": "lookahead_tip60_read_at_600_x2",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "3200000",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "60"
+      },
+      "blockIntervalTime": "600",
+      "count": "2",
+      "disableCap": true,
+      "expected": "32002519",
+      "legacyExact": "32002078",
+      "note": "Two blocks from the same full 60-tick tip, asked about at 600: the exact first transition lands (16,000,021, 16,000,168) at the base interval, so s_1 = 32,000,189, and the one remaining block is driven at the base interval, hence G = 38,400 for that step. The bound adds 2,319 plus 11 of round-up, giving 32,002,519 against the drive's 32,002,078; the +441 is one dropped decay, 9 of flooring and the 11 round-up."
+    },
+    {
+      "name": "lookahead_at_maxima",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "12297829382473034368",
+        "epsilon": "2837960626724546304",
+        "beta": "9459868755748488064",
+        "tau": "600"
+      },
+      "blockIntervalTime": "600",
+      "count": "144",
+      "disableCap": true,
+      "expected": "12297829382473034368",
+      "legacyExact": "12297829382473034368",
+      "note": "An illustrative one-day window (86,400 ticks = 144 base blocks) from the (epsilonMax, betaMax) fixed point. The state is its own fixed point, so each of the 144 driven blocks leaves it pinned and both bound and drive return maxSafe. The equality is a property of that state, not of any stopping rule: the drive steps all 144 blocks."
+    },
+    {
+      "name": "lookahead_radius_guard",
+      "config": "mainnet",
+      "initial": {
+        "blockSize": "12297829382473034368",
+        "epsilon": "2837960626724546304",
+        "beta": "9459868755748488064",
+        "tau": "600"
+      },
+      "blockIntervalTime": "600",
+      "count": "75877",
+      "disableCap": true,
+      "expected": "12297829382473034368",
+      "legacyExact": "12297829382473034368",
+      "note": "ceil(45,526,200 / 600) = 75,877 base blocks, so k = 75,876 = D / G exactly: the first count at which the AM-GM form has no closed equivalent and the entry point must return epsilonMax + betaMax rather than divide by D - k*G = 0. The drive still steps all 75,877 blocks and lands on the same value because the state is its own fixed point."
+    }
+  ],
+  "validation": {
+    "config": [
+      {
+        "name": "cfg_default_accept",
+        "scalingFactor": "default",
+        "epsilon0": "default",
+        "beta0": "default",
+        "epsilonMax": "default",
+        "betaMax": "default",
+        "fixedSize": false,
+        "accept": true,
+        "note": "the shipped mainnet configuration"
+      },
+      {
+        "name": "cfg_fixed_accept",
+        "scalingFactor": "default",
+        "epsilon0": "default",
+        "beta0": "default",
+        "epsilonMax": "default",
+        "betaMax": "default",
+        "fixedSize": true,
+        "accept": true,
+        "note": "fixed-size configurations are valid (testnet3/4)"
+      },
+      {
+        "name": "cfg_scaling_zero",
+        "scalingFactor": "0",
+        "epsilon0": "default",
+        "beta0": "default",
+        "epsilonMax": "default",
+        "betaMax": "default",
+        "fixedSize": false,
+        "accept": false,
+        "note": "INTERNAL_SCALING_FACTOR == 0 is rejected: the limit computation divides by 600 * s"
+      },
+      {
+        "name": "cfg_scaling_overflow",
+        "scalingFactor": "30744573456182587",
+        "epsilon0": "default",
+        "beta0": "default",
+        "epsilonMax": "default",
+        "betaMax": "default",
+        "fixedSize": false,
+        "accept": false,
+        "note": "600 * scalingFactor would overflow uint64"
+      },
+      {
+        "name": "cfg_epsilon0_zero",
+        "scalingFactor": "default",
+        "epsilon0": "0",
+        "beta0": "default",
+        "epsilonMax": "default",
+        "betaMax": "default",
+        "fixedSize": false,
+        "accept": false,
+        "note": "epsilon0 = 0 fails the gamma/zeta floor: 0 < muldiv(37938, 128, 64) = 75,876, so the control size could never adjust by even 1"
+      },
+      {
+        "name": "cfg_epsilon0_absurd",
+        "scalingFactor": "default",
+        "epsilon0": "18446744073709551615",
+        "beta0": "default",
+        "epsilonMax": "default",
+        "betaMax": "default",
+        "fixedSize": false,
+        "accept": false,
+        "note": "epsilon0 above epsilonMax"
+      },
+      {
+        "name": "cfg_beta0_absurd",
+        "scalingFactor": "default",
+        "epsilon0": "default",
+        "beta0": "18446744073709551615",
+        "epsilonMax": "default",
+        "betaMax": "default",
+        "fixedSize": false,
+        "accept": false,
+        "note": "beta0 above betaMax"
+      },
+      {
+        "name": "cfg_maxima_sum_overflow",
+        "scalingFactor": "default",
+        "epsilon0": "default",
+        "beta0": "default",
+        "epsilonMax": "9223372036854775808",
+        "betaMax": "9223372036854775808",
+        "fixedSize": false,
+        "accept": false,
+        "note": "epsilonMax + betaMax == 2^64 triggers the IsValid sum-overflow guard. Unreachable via SetMax (which caps the sum at maxSafe), so it is set by hand; this is the only guard between a hand-built config and a muldiv overflow"
+      }
+    ],
+    "state": [
+      {
+        "name": "state_floor_accept",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "600",
+        "accept": true,
+        "note": "State(config, 0): the pre-activation state"
+      },
+      {
+        "name": "state_elevated_accept",
+        "defaultCtor": false,
+        "blockSize": "32000000",
+        "epsilon": "16000210",
+        "beta": "16001679",
+        "tau": "600",
+        "accept": true,
+        "note": "the state landed by one_full_600"
+      },
+      {
+        "name": "state_at_maxima_accept",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "2837960626724546304",
+        "beta": "9459868755748488064",
+        "tau": "600",
+        "accept": true,
+        "note": "epsilon == epsilonMax and beta == betaMax exactly is valid (both range checks are <=)"
+      },
+      {
+        "name": "state_eps_max_plus1_reject",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "2837960626724546305",
+        "beta": "16000000",
+        "tau": "600",
+        "accept": false,
+        "note": "epsilon == epsilonMax + 1"
+      },
+      {
+        "name": "state_beta_max_plus1_reject",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "16000000",
+        "beta": "9459868755748488065",
+        "tau": "600",
+        "accept": false,
+        "note": "beta == betaMax + 1"
+      },
+      {
+        "name": "state_default_ctor_reject",
+        "defaultCtor": true,
+        "blockSize": "0",
+        "epsilon": "0",
+        "beta": "0",
+        "tau": "0",
+        "accept": false,
+        "note": "the default-constructed State is NOT a valid consensus state (control 0 < epsilon0); use State(config, size) or FromTuple"
+      },
+      {
+        "name": "state_tau_zero",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "0",
+        "accept": false,
+        "note": "interval below MIN_BLOCK_INTERVAL_TIME"
+      },
+      {
+        "name": "state_tau_over_max",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "16000000",
+        "beta": "16000000",
+        "tau": "601",
+        "accept": false,
+        "note": "interval above MAX_BLOCK_INTERVAL_TIME"
+      },
+      {
+        "name": "state_eps_below_floor",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "15999999",
+        "beta": "16000000",
+        "tau": "600",
+        "accept": false,
+        "note": "control below epsilon0"
+      },
+      {
+        "name": "state_eps_above_max",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "18446744073709551615",
+        "beta": "16000000",
+        "tau": "600",
+        "accept": false,
+        "note": "control above epsilonMax"
+      },
+      {
+        "name": "state_beta_below_floor",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "16000000",
+        "beta": "15999999",
+        "tau": "600",
+        "accept": false,
+        "note": "elastic below beta0"
+      },
+      {
+        "name": "state_beta_above_max",
+        "defaultCtor": false,
+        "blockSize": "0",
+        "epsilon": "16000000",
+        "beta": "18446744073709551615",
+        "tau": "600",
+        "accept": false,
+        "note": "elastic above betaMax"
+      }
+    ]
+  }
+}

@@ -49,7 +49,7 @@ func TestFailedFinalizeWritesStatus(t *testing.T) {
 
 	// A side chain from block 4 whose block can't be read back.
 	side := procTestBlock(t, blocks[4].MsgBlock(), 4,
-		CalcBlockSubsidy(5, params)-1, params.PowLimitBits, nil)
+		legacySubsidy(5, params)-1, params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(side, BFNone); err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestInvalidChainNotMainChain(t *testing.T) {
 	var first *bchutil.Block
 	for h := int32(4); h <= 5; h++ {
 		block := procTestBlock(t, prev.MsgBlock(), h-1,
-			CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+			legacySubsidy(h, params)-1, params.PowLimitBits, nil)
 		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 			t.Fatalf("side chain block %d: %v", h, err)
 		}
@@ -142,7 +142,7 @@ func TestInvalidChainNotMainChain(t *testing.T) {
 	}
 	chain.index.SetStatusFlags(chain.index.LookupNode(first.Hash()), statusValidateFailed)
 
-	block := procTestBlock(t, prev.MsgBlock(), 5, CalcBlockSubsidy(6, params)-1,
+	block := procTestBlock(t, prev.MsgBlock(), 5, legacySubsidy(6, params)-1,
 		params.PowLimitBits, nil)
 	isMainChain, _, err := chain.ProcessBlock(block, BFNone)
 	if err != nil {

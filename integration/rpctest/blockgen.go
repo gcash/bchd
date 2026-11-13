@@ -108,7 +108,10 @@ func createCoinbaseTx(coinbaseScript []byte, nextBlockHeight int32,
 		return nil, err
 	}
 
-	tx := wire.NewMsgTx(wire.TxVersion)
+	// Version 2 keeps the coinbase clear of the version 1, lock time 0
+	// shape that the 1-minute block upgrade forbids for coinbases paying 25
+	// BCH or more.
+	tx := wire.NewMsgTx(2)
 	tx.AddTxIn(&wire.TxIn{
 		// Coinbase transactions have no inputs, so previous outpoint is
 		// zero hash and max index.
@@ -118,8 +121,11 @@ func createCoinbaseTx(coinbaseScript []byte, nextBlockHeight int32,
 		Sequence:        wire.MaxTxInSequenceNum,
 	})
 	if len(mineTo) == 0 {
+		// Only the node knows whether the upgrade to 1-minute blocks has
+		// activated, so pay the subsidy of a 600-tick block.
 		tx.AddTxOut(&wire.TxOut{
-			Value:    blockchain.CalcBlockSubsidy(nextBlockHeight, net),
+			Value: blockchain.CalcBlockSubsidy(
+				int64(nextBlockHeight)*600, 600, net),
 			PkScript: pkScript,
 		})
 	} else {

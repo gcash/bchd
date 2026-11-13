@@ -371,6 +371,41 @@ func TestProcessBlockHeadersDifficulty(t *testing.T) {
 	processHeaders(t, chain, 1, late)
 }
 
+// TestBlockTicksByHash ensures the ticks of a block and of a kept header are
+// found, and that a block's are found while the chain lock is held.
+func TestBlockTicksByHash(t *testing.T) {
+	chain, nodes := headerTestChain(t, 2)
+	tip := nodes[2]
+	h3 := testHeader(tip.hash, after(tip, 10*time.Minute),
+		chain.chainParams.PowLimitBits, 0)
+	processHeaders(t, chain, 1, h3)
+
+	got, err := chain.BlockTicksByHash(ptr(hashOf(h3)))
+	if err != nil || got != (BlockTicks{3 * 600, 600, 600}) {
+		t.Fatalf("kept header ticks %+v (%v)", got, err)
+	}
+	if _, err := chain.BlockTicksByHash(&chainhash.Hash{1}); err == nil {
+		t.Fatal("an unknown block has ticks")
+	}
+
+	chain.chainLock.Lock()
+	done := make(chan BlockTicks, 1)
+	go func() {
+		ticks, _ := chain.BlockTicksByHash(&tip.hash)
+		done <- ticks
+	}()
+	select {
+	case got = <-done:
+	case <-time.After(10 * time.Second):
+		chain.chainLock.Unlock()
+		t.Fatal("block ticks wait for the chain lock")
+	}
+	chain.chainLock.Unlock()
+	if got != (BlockTicks{2 * 600, 600, 600}) {
+		t.Fatalf("tip ticks %+v", got)
+	}
+}
+
 // ptr returns a pointer to a copy of hash.
 func ptr(hash chainhash.Hash) *chainhash.Hash {
 	return &hash
@@ -388,7 +423,7 @@ func TestHeaderTreeNodeMovesToIndex(t *testing.T) {
 	var headers []*wire.BlockHeader
 	for height := int32(6); height <= 8; height++ {
 		block := procTestBlock(t, prev.MsgBlock(), height-1,
-			CalcBlockSubsidy(height, params), params.PowLimitBits, nil)
+			legacySubsidy(height, params), params.PowLimitBits, nil)
 		next = append(next, block)
 		headers = append(headers, &block.MsgBlock().Header)
 		prev = block

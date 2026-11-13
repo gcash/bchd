@@ -78,20 +78,32 @@ type BestState struct {
 	NumTxns    uint64         // The number of txns in the block.
 	TotalTxns  uint64         // The total number of txns in the chain.
 	MedianTime time.Time      // Median time as per CalcPastMedianTime.
+
+	Ticks             int64 // The ticks of the block.
+	NextBlockInterval int64 // The target interval of the next block.
+	Upgrade2027Active bool  // Whether the next block is a 1-minute block.
+
+	// TickSchedule maps the heights of the chain to ticks, up to the next
+	// block.
+	TickSchedule TickSchedule
 }
 
 // newBestState returns a new best stats instance for the given parameters.
-func newBestState(node *blockNode, blockSize, numTxns,
+func newBestState(node *blockNode, sched TickSchedule, blockSize, numTxns,
 	totalTxns uint64, medianTime time.Time) *BestState {
 
 	return &BestState{
-		Hash:       node.hash,
-		Height:     node.height,
-		Bits:       node.bits,
-		BlockSize:  blockSize,
-		NumTxns:    numTxns,
-		TotalTxns:  totalTxns,
-		MedianTime: medianTime,
+		Hash:              node.hash,
+		Height:            node.height,
+		Bits:              node.bits,
+		BlockSize:         blockSize,
+		NumTxns:           numTxns,
+		TotalTxns:         totalTxns,
+		MedianTime:        medianTime,
+		Ticks:             node.ticks,
+		NextBlockInterval: int64(node.nextInterval),
+		Upgrade2027Active: isUpgrade2027Active(node),
+		TickSchedule:      sched,
 	}
 }
 
@@ -196,6 +208,14 @@ type BlockChain struct {
 	maxReorgDepth     int32
 	finalizationDelay time.Duration
 	startTime         int64
+
+	// upgrade2027ActivationTime is the network's activation time of the
+	// 1-minute block upgrade, or its override.
+	upgrade2027ActivationTime uint64
+
+	// upgrade2027Node caches the last activation block of the 1-minute
+	// block upgrade found by upgrade2027ActivationNode.
+	upgrade2027Node atomic.Pointer[blockNode]
 
 	// The state is used as a fairly efficient way to cache information
 	// about the current best chain state that is returned to callers when
@@ -336,6 +356,12 @@ func (b *BlockChain) UtxoCacheFlushInProgress() bool {
 	return b.utxoCache.flushInProgress
 }
 
+// Upgrade2027ActivationTime returns the median time past at which the
+// 1-minute block upgrade activates: the network's time or its override.
+func (b *BlockChain) Upgrade2027ActivationTime() uint64 {
+	return b.upgrade2027ActivationTime
+}
+
 // PruneMode returns whether or not the blockchain is running in prune mode.
 func (b *BlockChain) PruneMode() bool {
 	return b.pruneMode
@@ -372,11 +398,12 @@ func (b *BlockChain) AddHeader(header *wire.BlockHeader) error {
 	defer b.chainLock.Unlock()
 
 	tip := b.bestChain.tip()
-	node := newBlockNode(header, tip)
+	node := newBlockNode(header, tip, b.upgrade2027ActivationTime)
 	b.index.AddNode(node)
 	b.index.SetStatusFlags(node, statusValid)
 	b.bestChain.SetTip(node)
-	state := newBestState(node, 0, 0, 0, node.CalcPastMedianTime())
+	state := newBestState(node, b.tickSchedule(node), 0, 0, 0,
+		node.CalcPastMedianTime())
 	b.stateLock.Lock()
 	b.stateSnapshot = state
 	b.stateLock.Unlock()
@@ -546,21 +573,21 @@ func (b *BlockChain) addOrphanBlock(block *bchutil.Block, flags BehaviorFlags) e
 }
 
 // SequenceLock represents the converted relative lock-time in seconds, and
-// absolute block-height for a transaction input's relative lock-times.
+// absolute block ticks for a transaction input's relative lock-times.
 // According to SequenceLock, after the referenced input has been confirmed
 // within a block, a transaction spending that input can be included into a
-// block either after 'seconds' (according to past median time), or once the
-// 'BlockHeight' has been reached.
+// block either after 'seconds' (according to past median time), or once a
+// block with more than 'BlockTicks' ticks has been reached.
 type SequenceLock struct {
-	Seconds     int64
-	BlockHeight int32
+	Seconds    int64
+	BlockTicks int64
 }
 
 // CalcSequenceLock computes a relative lock-time SequenceLock for the passed
 // transaction using the passed UtxoViewpoint to obtain the past median time
 // for blocks in which the referenced inputs of the transactions were included
 // within. The generated SequenceLock lock can be used in conjunction with a
-// block height, and adjusted median block time to determine if all the inputs
+// block's ticks, and adjusted median block time to determine if all the inputs
 // referenced within a transaction have reached sufficient maturity allowing
 // the candidate transaction to be included in a block.
 //
@@ -600,7 +627,7 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 	// at any given height or time. This value is returned as the relative
 	// lock time in the case that BIP 68 is disabled, or has not yet been
 	// activated.
-	sequenceLock := &SequenceLock{Seconds: -1, BlockHeight: -1}
+	sequenceLock := &SequenceLock{Seconds: -1, BlockTicks: -1}
 
 	// The sequence locks semantics are always active for transactions
 	// within the mempool.
@@ -632,9 +659,10 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 		return sequenceLock, nil
 	}
 
-	// Grab the next height from the PoV of the passed blockNode to use for
-	// inputs present in the mempool.
-	nextHeight := node.height + 1
+	// Inputs present in the mempool are taken to be in the block after the
+	// passed blockNode, whose schedule also maps the heights of the
+	// confirmed inputs to ticks.
+	sched := b.tickSchedule(node)
 
 	for txInIndex, txIn := range mTx.TxIn {
 		utxo := utxoView.LookupEntry(txIn.PreviousOutPoint)
@@ -650,8 +678,8 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 		// assume the transaction makes it into the next block when
 		// evaluating its sequence blocks.
 		inputHeight := utxo.BlockHeight()
-		if inputHeight == 0x7fffffff {
-			inputHeight = nextHeight
+		if inputHeight == mempoolHeight {
+			inputHeight = sched.NextHeight()
 		}
 
 		// Given a sequence number, we apply the relative time lock
@@ -698,18 +726,25 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *bchutil.Tx, utxoView 
 			}
 		default:
 			// The relative lock-time for this input is expressed
-			// in blocks so we calculate the relative offset from
-			// the input's height as its converted absolute
-			// lock-time. We subtract one from the relative lock in
-			// order to maintain the original lockTime semantics.
-			blockHeight := inputHeight + int32(relativeLock-1)
-			if blockHeight > sequenceLock.BlockHeight {
-				sequenceLock.BlockHeight = blockHeight
+			// in units of 600 ticks, counted from the ticks of the
+			// input's block.
+			blockTicks := sequenceLockTicks(
+				sched.HeightToTicks(inputHeight), relativeLock)
+			if blockTicks > sequenceLock.BlockTicks {
+				sequenceLock.BlockTicks = blockTicks
 			}
 		}
 	}
 
 	return sequenceLock, nil
+}
+
+// sequenceLockTicks returns the ticks of the last block in which an input
+// created in a block with the passed ticks is still locked by the passed
+// height-based relative lock.  One is subtracted to maintain the original
+// lockTime semantics.
+func sequenceLockTicks(coinTicks, relativeLock int64) int64 {
+	return coinTicks + relativeLock*lockTimeUnitTicks - 1
 }
 
 // LockTimeToSequence converts the passed relative locktime to a sequence
@@ -855,10 +890,10 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	b.stateLock.RUnlock()
 	numTxns := uint64(len(block.MsgBlock().Transactions))
 	blockSize := uint64(block.MsgBlock().SerializeSize())
-	state := newBestState(node, blockSize, numTxns,
-		curTotalTxns+numTxns, node.CalcPastMedianTime())
+	state := newBestState(node, b.tickSchedule(node), blockSize,
+		numTxns, curTotalTxns+numTxns, node.CalcPastMedianTime())
 
-	ablaState := b.ablaNextState(b.ablaState, node.height, blockSize)
+	ablaState := b.ablaNodeNextState(b.ablaState, node, blockSize)
 
 	// Atomically insert info into the database.
 	err = b.db.Update(func(dbTx database.Tx) error {
@@ -956,7 +991,8 @@ func (b *BlockChain) connectBlock(node *blockNode, block *bchutil.Block,
 	flushMode := FlushIfNeeded
 	if b.pruneMode {
 		node := b.bestChain.FindFork(b.index.LookupNode(&b.utxoCache.lastFlushHash))
-		if node.height <= block.Height()-int32(b.pruneDepth) {
+		keep := b.bestChain.NodeByTickDepth(b.pruneTicks())
+		if keep != nil && node.height <= keep.height {
 			flushMode = FlushRequired
 		}
 	}
@@ -1006,8 +1042,8 @@ func (b *BlockChain) disconnectBlock(node *blockNode, block *bchutil.Block, view
 	numTxns := uint64(len(prevBlock.MsgBlock().Transactions))
 	blockSize := uint64(prevBlock.MsgBlock().SerializeSize())
 	newTotalTxns := curTotalTxns - uint64(len(block.MsgBlock().Transactions))
-	state := newBestState(prevNode, blockSize, numTxns,
-		newTotalTxns, prevNode.CalcPastMedianTime())
+	state := newBestState(prevNode, b.tickSchedule(prevNode), blockSize,
+		numTxns, newTotalTxns, prevNode.CalcPastMedianTime())
 
 	var ablaState ABLAState
 	err = b.db.Update(func(dbTx database.Tx) error {
@@ -1957,8 +1993,8 @@ func (b *BlockChain) locateInventory(locator BlockLocator, hashStop *chainhash.H
 	// are below our prune depth then just return nil as we can't
 	// serve these blocks if requested.
 	if b.pruneMode && !headersOnly {
-		tip := b.bestChain.Tip()
-		if startNode.height < tip.height-int32(b.pruneDepth) {
+		keep := b.bestChain.NodeByTickDepth(b.pruneTicks())
+		if keep != nil && startNode.height < keep.height {
 			return nil, 0
 		}
 	}
@@ -2321,19 +2357,26 @@ func (b *BlockChain) RollbackUtxoSet(height int32) (*UtxoViewpoint, error) {
 	return view, nil
 }
 
+// pruneTicks returns the tick depth of the deepest block a pruned node keeps.
+// The prune depth counts 10-minute blocks, so a node keeps ten times as many
+// 1-minute blocks.
+func (b *BlockChain) pruneTicks() int64 {
+	return int64(b.pruneDepth) * legacyBlockInterval
+}
+
 // prune deletes the block data and spend journals for all blocks deeper than
 // the set prune depth.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) prune() error {
 	return b.db.Update(func(tx database.Tx) error {
-		tip := b.bestChain.Tip()
-		if tip.height <= int32(b.pruneDepth) {
+		keep := b.bestChain.NodeByTickDepth(b.pruneTicks())
+		if keep == nil || keep.parent == nil {
 			return nil
 		}
 		pruneHeight := dbFetchPruneHeight(tx)
 
-		node := b.bestChain.NodeByHeight(tip.height - int32(b.pruneDepth) - 1)
+		node := keep.parent
 
 		// Delete blocks before the height
 		if err := tx.DeleteBlocks(uint32(node.height)); err != nil {
@@ -2353,7 +2396,7 @@ func (b *BlockChain) prune() error {
 		}
 
 		// Put the prune height to the database
-		return dbPutPruneHeight(tx, uint32(tip.height)-b.pruneDepth)
+		return dbPutPruneHeight(tx, uint32(keep.height))
 	})
 }
 
@@ -2541,7 +2584,8 @@ func (b *BlockChain) reIndexChainState(resume bool, interrupt <-chan struct{}) e
 		if err = b.utxoCache.Commit(view); err != nil {
 			return err
 		}
-		state = newBestState(node, 0, 0, 0, time.Time{})
+		state = newBestState(node, b.tickSchedule(node), 0, 0, 0,
+			time.Time{})
 		if interruptRequested(interrupt) {
 			if err := b.utxoCache.Flush(FlushRequired, state); err != nil {
 				return err
@@ -2556,7 +2600,8 @@ func (b *BlockChain) reIndexChainState(resume bool, interrupt <-chan struct{}) e
 	}
 	tip := b.bestChain.Tip()
 	if state == nil {
-		state = newBestState(tip, 0, 0, 0, time.Time{})
+		state = newBestState(tip, b.tickSchedule(tip), 0, 0, 0,
+			time.Time{})
 	}
 	if err := b.utxoCache.Flush(FlushRequired, state); err != nil {
 		return err
@@ -2701,8 +2746,9 @@ type Config struct {
 	Prune bool
 
 	// PruneDepth is the minimum amount of blocks to keep to protect
-	// against a reorg. Everything after the depth will be deleted
-	// whenever we connect a new block.
+	// against a reorg, counted in 10-minute blocks: a 1-minute block counts
+	// as a tenth.  Everything after the depth will be deleted whenever we
+	// connect a new block.
 	PruneDepth uint32
 
 	// ReIndexChainState will delete the UTXO db bucket and rebuild the
@@ -2731,6 +2777,17 @@ type Config struct {
 	// a block known, before the block is finalized.  Zero selects
 	// DefaultFinalizationDelay.
 	FinalizationDelay time.Duration
+
+	// Upgrade2027ActivationTime, when not nil, replaces the network's
+	// Upgrade2027ActivationTime.  The caller checks that it is not before
+	// the network's ASERT anchor.
+	Upgrade2027ActivationTime *uint64
+
+	// UseStoredUpgrade2027Time, when Upgrade2027ActivationTime is nil,
+	// takes the activation time the database was last used with instead
+	// of the network's.  It is for tools that work on the data directory
+	// of a node.
+	UseStoredUpgrade2027Time bool
 
 	// NotifyMaxBlockSizeLookAhead, when not nil, is called with the largest
 	// size ABLA can let a block have within the next 2048 blocks, assuming
@@ -2844,6 +2901,21 @@ func New(config *Config) (*BlockChain, error) {
 	}
 	if b.finalizationDelay == 0 {
 		b.finalizationDelay = DefaultFinalizationDelay
+	}
+	b.upgrade2027ActivationTime = params.Upgrade2027ActivationTime
+	if config.Upgrade2027ActivationTime != nil {
+		b.upgrade2027ActivationTime = *config.Upgrade2027ActivationTime
+	} else if config.UseStoredUpgrade2027Time {
+		err := b.db.View(func(dbTx database.Tx) error {
+			stored, ok, err := dbFetchUpgrade2027Time(dbTx)
+			if ok {
+				b.upgrade2027ActivationTime = stored
+			}
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// A fast sync whose download of the utxo set was not verified can only

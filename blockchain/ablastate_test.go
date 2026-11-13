@@ -65,6 +65,16 @@ func ablaTestBlock(t *testing.T, prev *wire.MsgBlock, height int32, size int,
 	params *chaincfg.Params, extra ...*wire.MsgTx) *bchutil.Block {
 
 	t.Helper()
+	return ablaTestBlockPaying(t, prev, height, size, params,
+		legacySubsidy(height, params), extra...)
+}
+
+// ablaTestBlockPaying is ablaTestBlock with a coinbase paying subsidy.
+func ablaTestBlockPaying(t *testing.T, prev *wire.MsgBlock, height int32,
+	size int, params *chaincfg.Params, subsidy int64,
+	extra ...*wire.MsgTx) *bchutil.Block {
+
+	t.Helper()
 	cbScript, err := txscript.NewScriptBuilder().AddInt64(int64(height)).
 		AddInt64(int64(size)).Script()
 	if err != nil {
@@ -76,8 +86,7 @@ func ablaTestBlock(t *testing.T, prev *wire.MsgBlock, height int32, size int,
 		Sequence:         wire.MaxTxInSequenceNum,
 		SignatureScript:  cbScript,
 	})
-	cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(height, params), opTrueScript,
-		wire.TokenData{}))
+	cb.AddTxOut(wire.NewTxOut(subsidy, opTrueScript, wire.TokenData{}))
 	pad := wire.NewTxOut(0, []byte{txscript.OP_RETURN}, wire.TokenData{})
 	cb.AddTxOut(pad)
 
@@ -136,9 +145,10 @@ func ablaExpectedState(chain *BlockChain, blocks []*bchutil.Block) ABLAState {
 	genesisSize := uint64(chain.chainParams.GenesisBlock.SerializeSize())
 	state := ABLAState{blockHeight: 0, controlBlockSize: cfg.epsilon0,
 		elasticBufferSize: cfg.beta0}
-	state = state.nextABLAState(cfg, genesisSize)
+	state = state.nextABLAState(cfg, genesisSize, ablaBaseBlockInterval)
 	for _, block := range blocks {
-		state = state.nextABLAState(cfg, uint64(block.MsgBlock().SerializeSize()))
+		state = state.nextABLAState(cfg,
+			uint64(block.MsgBlock().SerializeSize()), ablaBaseBlockInterval)
 	}
 	return state
 }
@@ -316,7 +326,9 @@ func TestABLASideChainLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := sideState.nextABLAState(&chain.ablaConfig, uint64(sideLimit)); got != want {
+	want := sideState.nextABLAState(&chain.ablaConfig, uint64(sideLimit),
+		ablaBaseBlockInterval)
+	if got != want {
 		t.Fatalf("side chain ABLA state %+v, want %+v", got, want)
 	}
 }
@@ -398,7 +410,7 @@ func TestABLASideChainPrunedParent(t *testing.T) {
 	}
 
 	// The next block's limit follows from the size of the pruned block.
-	nextState := sideState.nextABLAState(cfg, uint64(sideSize))
+	nextState := sideState.nextABLAState(cfg, uint64(sideSize), ablaBaseBlockInterval)
 	nextLimit := int(max(1000000, nextState.getBlockSizeLimit()))
 	tooBig := ablaTestBlock(t, side.MsgBlock(), 3, nextLimit+1, params,
 		spend(side.MsgBlock()))
@@ -424,7 +436,9 @@ func TestABLASideChainPrunedParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := nextState.nextABLAState(cfg, uint64(nextLimit)); got != want {
+	want := nextState.nextABLAState(cfg, uint64(nextLimit),
+		ablaBaseBlockInterval)
+	if got != want {
 		t.Fatalf("side chain ABLA state %+v, want %+v", got, want)
 	}
 }
@@ -801,7 +815,8 @@ func expectedLookAhead(chain *BlockChain) uint64 {
 	tip := chain.bestChain.Tip().height
 	state := chain.ablaState
 	for height := tip + 1; height < tip+2048; height++ {
-		state = chain.ablaNextState(state, height, state.getBlockSizeLimit())
+		state = chain.ablaNextState(state, height, ablaBaseBlockInterval,
+			state.getBlockSizeLimit())
 	}
 	return state.getBlockSizeLimit()
 }
@@ -930,7 +945,7 @@ func TestMaxBlockSizeLookAheadBlockMessages(t *testing.T) {
 	state := chain.ablaState
 	for past := 0; past < 1000; {
 		state = state.nextABLAState(&chain.ablaConfig,
-			state.getBlockSizeLimit())
+			state.getBlockSizeLimit(), ablaBaseBlockInterval)
 		if state.getBlockSizeLimit() > uint64(wire.MaxBlockPayload()) {
 			past++
 		}
@@ -988,7 +1003,8 @@ func TestMaxBlockSizeLookAheadHeights(t *testing.T) {
 		elasticBufferSize: config.beta0}
 	grown := initial
 	for range 100 {
-		grown = grown.nextABLAState(config, grown.getBlockSizeLimit())
+		grown = grown.nextABLAState(config, grown.getBlockSizeLimit(),
+			ablaBaseBlockInterval)
 	}
 	for _, state := range []ABLAState{initial, grown} {
 		for height := uint64(n0 - 2100); height <= n0+3; height++ {
@@ -1279,7 +1295,9 @@ func TestABLASideChainLegacyPaddedBlock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", test.name, err)
 		}
-		if want := forkState.nextABLAState(cfg, test.size); got != want {
+		want := forkState.nextABLAState(cfg, test.size,
+			ablaBaseBlockInterval)
+		if got != want {
 			t.Errorf("%s: ABLA state %+v, want %+v", test.name, got, want)
 		}
 		if db.reads != test.reads {
@@ -1312,11 +1330,14 @@ func TestABLASideChainLegacyPaddedAboveFloor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := forkState.nextABLAState(&chain.ablaConfig, 2000)
+	want := forkState.nextABLAState(&chain.ablaConfig, 2000,
+		ablaBaseBlockInterval)
 	if got != want {
 		t.Errorf("ABLA state %+v, want %+v", got, want)
 	}
-	if padded := forkState.nextABLAState(&chain.ablaConfig, 30000); padded == want {
+	padded := forkState.nextABLAState(&chain.ablaConfig, 30000,
+		ablaBaseBlockInterval)
+	if padded == want {
 		t.Errorf("the padded size gives the same state %+v", want)
 	}
 	if db.reads != 1 {
@@ -1366,8 +1387,9 @@ func TestABLARebuildLegacyPaddedBlock(t *testing.T) {
 }
 
 // TestABLANextStateMonotone ensures the ABLA state after a block never
-// decreases as the block's size grows, which ablaBlockSize relies on to leave
-// a block unread when its stored size gives the state an empty block would.
+// decreases as the block's size grows, at any block interval, which
+// ablaBlockSize relies on to leave a block unread when its stored size gives
+// the state an empty block would.
 func TestABLANextStateMonotone(t *testing.T) {
 	for _, params := range []*chaincfg.Params{ablaTestParams(),
 		&chaincfg.MainNetParams, &chaincfg.ChipNetParams} {
@@ -1386,24 +1408,30 @@ func TestABLANextStateMonotone(t *testing.T) {
 			{floor.blockHeight, 3 * cfg.epsilon0, 2 * cfg.beta0},
 			{floor.blockHeight, cfg.epsilonMax, cfg.betaMax}}
 		for _, prev := range states {
-			limit := prev.controlBlockSize + prev.elasticBufferSize
-			// Above this size the control block size grows.
-			threshold := muldiv(prev.controlBlockSize, B7, cfg.zetaXB7)
-			sizes := []uint64{0, 1, 1000, 25000, 100000, threshold - 1,
-				threshold, threshold + 1, threshold + 100000, limit / 2,
-				limit - 1, limit, limit + 1, limit + 100000}
-			slices.Sort(sizes)
-			last := prev.nextABLAState(cfg, sizes[0])
-			for _, size := range sizes[1:] {
-				next := prev.nextABLAState(cfg, size)
-				if next.controlBlockSize < last.controlBlockSize ||
-					next.elasticBufferSize < last.elasticBufferSize {
+			for _, interval := range []uint64{600, 300, 60, 1} {
+				limit := prev.scaledSize(interval)
+				// Above this size the control block size grows.
+				threshold := muldiv(muldiv(prev.controlBlockSize, B7,
+					cfg.zetaXB7), interval, ablaBaseBlockInterval)
+				sizes := []uint64{0, 1, 1000, 25000, 100000,
+					threshold - 1, threshold, threshold + 1,
+					threshold + 100000, limit / 2, limit - 1, limit,
+					limit + 1, limit + 100000, 2 * limit,
+					2*limit + 1}
+				slices.Sort(sizes)
+				last := prev.nextABLAState(cfg, sizes[0], interval)
+				for _, size := range sizes[1:] {
+					next := prev.nextABLAState(cfg, size, interval)
+					if next.controlBlockSize < last.controlBlockSize ||
+						next.elasticBufferSize < last.elasticBufferSize {
 
-					t.Errorf("%s: state after %+v with %d bytes, %+v, "+
-						"is below the one with fewer bytes, %+v",
-						params.Name, prev, size, next, last)
+						t.Errorf("%s: state after %+v with %d bytes "+
+							"at %d ticks, %+v, is below the one "+
+							"with fewer bytes, %+v", params.Name,
+							prev, size, interval, next, last)
+					}
+					last = next
 				}
-				last = next
 			}
 		}
 	}
