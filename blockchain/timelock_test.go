@@ -68,14 +68,10 @@ func (s vectorSchedule) ticks(height int64) int64 {
 }
 
 // TestTimelockVectors runs the CHIP-2025-03 timelock vectors from fablous
-// 5a4cecd against the lock time, sequence lock and coinbase maturity rules.
+// 9c4b023 against the lock time, sequence lock and coinbase maturity rules.
 // The schedules with at most one change to 60 ticks are also run through the
-// exported functions with a TickSchedule.
-//
-// The lock_coinbase_* vectors take a coinbase to be final in every block.
-// The exemption only holds after the activation block, so rows at or below
-// it are checked against the rule without the exemption, which finds those
-// coinbases non-final.
+// exported functions with a TickSchedule.  A coinbase is final whatever its
+// lock time only from the block after the activation block.
 func TestTimelockVectors(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "chip202503",
 		"timelock", "timelock.json"))
@@ -99,6 +95,15 @@ func TestTimelockVectors(t *testing.T) {
 
 		t.Fatalf("constants %v", vectors.Constants)
 	}
+	// The upgrade applies from the block after the activation block.
+	if num(vectors.Constants["UPGRADE_ACTIVE_FROM"]) !=
+		num(vectors.Constants["ACTIVATION_HEIGHT_ILLUSTRATION"])+1 {
+
+		t.Fatalf("constants %v", vectors.Constants)
+	}
+	if len(vectors.Vectors) != 27 {
+		t.Fatalf("%d vectors, want 27", len(vectors.Vectors))
+	}
 
 	// The schedules, and the activation height of those a TickSchedule
 	// can hold: -1 for none, 0 for one that never activates.
@@ -121,6 +126,13 @@ func TestTimelockVectors(t *testing.T) {
 		}
 	}
 
+	if activations["activation_1M"] !=
+		num(vectors.Constants["ACTIVATION_HEIGHT_ILLUSTRATION"]) {
+
+		t.Fatalf("activation_1M activates at %d",
+			activations["activation_1M"])
+	}
+
 	// tickSchedule returns the TickSchedule for block height, or false
 	// when the schedule has no TickSchedule.
 	tickSchedule := func(name string, height int64) (TickSchedule, bool) {
@@ -132,7 +144,7 @@ func TestTimelockVectors(t *testing.T) {
 		return NewTickSchedule(int32(height), int32(ha), active), true
 	}
 
-	var gated, ran int
+	var coinbaseRows, ran int
 	for _, v := range vectors.Vectors {
 		sched, ok := schedules[v.Schedule]
 		if !ok {
@@ -159,8 +171,7 @@ func TestTimelockVectors(t *testing.T) {
 					uint32(num(v.Args["inputSequence"])),
 					v.SubjectIsCoinbase)
 				if v.SubjectIsCoinbase && !active {
-					gated++
-					want = false
+					coinbaseRows++
 				}
 				got = IsFinalizedTransaction(tx, ticks,
 					time.Unix(0, 0), active)
@@ -223,9 +234,9 @@ func TestTimelockVectors(t *testing.T) {
 			check(num(m.Tip)+1, m.Result, "mempool tip "+m.Tip)
 		}
 	}
-	if gated != 5 {
+	if coinbaseRows != 12 {
 		t.Errorf("checked %d coinbase rows at or below the activation "+
-			"block, want 5", gated)
+			"block, want 12", coinbaseRows)
 	}
 	if ran == 0 {
 		t.Fatal("no vectors ran")

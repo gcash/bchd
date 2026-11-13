@@ -1,10 +1,11 @@
 {
-  "description": "Tick-normalized height-mode time-lock vectors: nLockTime, nSequence, and coinbase maturity. T(x) is the cumulative tick of block x, inclusive of its own interval, from the schedule. Height-mode predicates: nLockTime is strict and absolute — final in block b iff T(b) > 600*lockTime; nSequence is weak and relative — mature in block b iff T(b) - T(fundingBlock) >= 600*relativeLock; coinbase maturity is weak and absolute — spendable in block b iff T(b) - T(creationBlock) >= 60,000. Mempool forms use T(tip+1) from the schedule, never T(tip)+tau(tip). BCHN escape clauses: nLockTime==0 is final everywhere; every-input-SEQUENCE_FINAL is final regardless of nLockTime. A coinbase transaction is exempt from both predicates: it is always final, whatever its nLockTime and whatever the nSequence of its single input (CHIP: Coinbase Exemption). The exemption is a scope restriction on the predicates, so it lives in the caller and the evaluators are coinbase-agnostic; the lock_coinbase_* vectors model that short circuit via `subjectIsCoinbase`, and lock_noncoinbase_bip54_twin pins that an identical non-coinbase is still bound. Coinbase maturity is unaffected, because it reads the spent output's height and a coinbase spends none. MTP-mode comparison and the LOCKTIME_THRESHOLD split are unchanged and out of scope. Every expected value is a hand-derived golden pin; the generator verifies the shared reference evaluators (timelock_ticks.h) against the pins and refuses to emit on any mismatch. All integer values are decimal strings to preserve full 64-bit precision.",
+  "description": "Tick-normalized height-mode time-lock vectors: nLockTime, nSequence, and coinbase maturity. T(x) is the cumulative tick of block x, inclusive of its own interval, from the schedule. Height-mode predicates: nLockTime is strict and absolute — final in block b iff T(b) > 600*lockTime; nSequence is weak and relative — mature in block b iff T(b) - T(fundingBlock) >= 600*relativeLock; coinbase maturity is weak and absolute — spendable in block b iff T(b) - T(creationBlock) >= 60,000. Mempool forms use T(tip+1) from the schedule, never T(tip)+tau(tip). BCHN escape clauses: nLockTime==0 is final everywhere; every-input-SEQUENCE_FINAL is final regardless of nLockTime. A coinbase transaction is exempt from both predicates, but only from H_a + 1 onward: at or before H_a both fields bind and the coinbase is evaluated like any other transaction. The exemption is a scope restriction on the predicates, so it lives in the caller behind the same upgrade predicate the rest of the rule set uses; the coinbase vectors model that short circuit via `subjectIsCoinbase`, gated on the upgrade boundary at H_a + 1, and lock_noncoinbase_bip54_twin pins that an identical non-coinbase is still bound. Coinbase maturity is unaffected, because it reads the spent output's height and a coinbase spends none. MTP-mode comparison and the LOCKTIME_THRESHOLD split are unchanged and out of scope. Every expected value is a hand-derived golden pin; the generator verifies the shared reference evaluators (timelock_ticks.h) against the pins and refuses to emit on any mismatch. All integer values are decimal strings to preserve full 64-bit precision.",
   "constants": {
     "BASE_BLOCK_INTERVAL_TIME": "600",
     "LOCK_UNIT_TICKS": "600",
     "COINBASE_MATURITY_TICKS": "60000",
-    "ACTIVATION_HEIGHT_ILLUSTRATION": "1000000"
+    "ACTIVATION_HEIGHT_ILLUSTRATION": "1000000",
+    "UPGRADE_ACTIVE_FROM": "1000001"
   },
   "schedules": [
     {
@@ -594,10 +595,18 @@
       },
       "subjectIsCoinbase": true,
       "expected": {
-        "releaseBlock": "0",
+        "releaseBlock": "1000001",
         "blocks": [
           {
             "block": "0",
+            "result": false
+          },
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "1000001",
             "result": true
           },
           {
@@ -619,7 +628,7 @@
         ],
         "mempool": []
       },
-      "note": "BIP-54 template stamping nLockTime = height - 1 with a non-final input sequence, as it lands in block H_a + 2 (1,000,002) where the value is 1,000,001. Without the exemption the raw predicate calls 1,000,002..1,000,010 non-final -- 600 * 1,000,001 = 600,000,600 is not exceeded by T(1,000,002) = 600,000,120, and the equality case at 1,000,010 is non-final too -- recovering only at 1,000,011. The bypass makes every block final, which is what keeps those templates valid."
+      "note": "BIP-54 template stamping nLockTime = height - 1 with a non-final input sequence, as it lands in block H_a + 2 (1,000,002) where the value is 1,000,001. Below H_a + 1 the pre-activation rule governs and block H_a rejects the stamp; from H_a + 1 the exemption makes it final in every block, which is what keeps that template valid. The check at 1,000,010 is the endpoint of that range and the sharp one: T(1,000,010) = 600,000,600 equals the boundary 600 * 1,000,001 exactly, so the strict > is what would reject it, while lock_noncoinbase_bip54_twin pins the identical fields as false there. Without the exemption the raw predicate would call 1,000,002..1,000,010 non-final -- T(1,000,002) = 600,000,120 is far short -- recovering only at 1,000,011."
     },
     {
       "name": "lock_coinbase_bip54_h_plus_1",
@@ -631,15 +640,19 @@
       },
       "subjectIsCoinbase": true,
       "expected": {
-        "releaseBlock": "0",
+        "releaseBlock": "1000001",
         "blocks": [
           {
             "block": "0",
-            "result": true
+            "result": false
+          },
+          {
+            "block": "999999",
+            "result": false
           },
           {
             "block": "1000000",
-            "result": true
+            "result": false
           },
           {
             "block": "1000001",
@@ -648,7 +661,7 @@
         ],
         "mempool": []
       },
-      "note": "The other half of the BIP-54 pair: block H_a + 1 carries nLockTime = 1,000,000, whose boundary 600,000,000 is already cleared by T(1,000,001) = 600,000,060, so the raw predicate would call this block final on its own. Pinned to show the exemption is not needed here -- and, with the twin below, that it is a scope restriction rather than a value-dependent special case."
+      "note": "The other half of the BIP-54 pair: block H_a + 1 carries nLockTime = 1,000,000. Below the gate the field binds -- at block H_a itself 1,000,000 is not below 1,000,000 and the input sequence is non-final, so the pre-activation rule rejects it -- while the exemption makes it final at H_a + 1, where the raw tick predicate 600,000,060 > 600,000,000 would also have cleared it. Pinned so the handover is visible: the same fields are non-final exactly one block earlier."
     },
     {
       "name": "lock_coinbase_time_mode",
@@ -660,11 +673,15 @@
       },
       "subjectIsCoinbase": true,
       "expected": {
-        "releaseBlock": "0",
+        "releaseBlock": "1000001",
         "blocks": [
           {
             "block": "0",
-            "result": true
+            "result": false
+          },
+          {
+            "block": "1000000",
+            "result": false
           },
           {
             "block": "1000001",
@@ -677,7 +694,7 @@
         ],
         "mempool": []
       },
-      "note": "Time-mode nLockTime (>= LOCKTIME_THRESHOLD), far ahead of any block timestamp: the raw time-mode arm reports non-final everywhere here, since the harness supplies nBlockTime = 0. The exemption covers the time-mode arm as well, so this is final throughout."
+      "note": "Time-mode nLockTime (>= LOCKTIME_THRESHOLD), far ahead of any block timestamp: the harness supplies nBlockTime = 0, so the pre-activation time-mode arm reports non-final everywhere at or below H_a. The exemption covers the time-mode arm too, but only from H_a + 1."
     },
     {
       "name": "lock_coinbase_zero_sequence",
@@ -689,10 +706,18 @@
       },
       "subjectIsCoinbase": true,
       "expected": {
-        "releaseBlock": "0",
+        "releaseBlock": "1000001",
         "blocks": [
           {
             "block": "0",
+            "result": false
+          },
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "1000001",
             "result": true
           },
           {
@@ -706,7 +731,7 @@
         ],
         "mempool": []
       },
-      "note": "nSequence 0x00000000 with a height-mode locktime naming 1,000,011: the raw predicate only clears it at 1,000,111. 'Whatever the nSequence' is the arm pinned here -- the exemption does not read it."
+      "note": "nSequence 0x00000000 with a height-mode locktime naming 1,000,011: the raw tick predicate, without the exemption, would only clear it at 1,000,111. 'Whatever the nSequence' is the arm pinned here -- the exemption does not read it, and it starts at H_a + 1 like every other upgraded rule."
     },
     {
       "name": "lock_noncoinbase_bip54_twin",
@@ -736,6 +761,35 @@
         "mempool": []
       },
       "note": "Non-coinbase twin of lock_coinbase_bip54_h_plus_2: identical fields, only the subject differs, and the raw predicate binds unchanged. This is what makes the exemption a restriction on scope rather than a relaxation of the two predicates for everyone."
+    },
+    {
+      "name": "lock_coinbase_pre_activation_binds",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": true,
+      "expected": {
+        "releaseBlock": "2",
+        "blocks": [
+          {
+            "block": "0",
+            "result": false
+          },
+          {
+            "block": "1",
+            "result": false
+          },
+          {
+            "block": "2",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "The exemption is a post-upgrade rule, not an unconditional property of coinbases: with nLockTime = 1 and a non-final sequence this coinbase is non-final at blocks 0 and 1 and final from block 2, all well below H_a. A harness that bypassed every coinbase would report release 0 here -- which is exactly the defect this family shipped with."
     }
   ]
 }
