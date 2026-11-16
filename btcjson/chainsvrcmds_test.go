@@ -726,6 +726,30 @@ func TestChainSvrCmds(t *testing.T) {
 			unmarshalled: &btcjson.GetHashesPerSecCmd{},
 		},
 		{
+			name: "getindexinfo",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getindexinfo")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetIndexInfoCmd(nil)
+			},
+			marshalled:   `{"jsonrpc":"1.0","method":"getindexinfo","params":[],"id":1}`,
+			unmarshalled: &btcjson.GetIndexInfoCmd{},
+		},
+		{
+			name: "getindexinfo optional",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getindexinfo", "txindex")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetIndexInfoCmd(btcjson.String("txindex"))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getindexinfo","params":["txindex"],"id":1}`,
+			unmarshalled: &btcjson.GetIndexInfoCmd{
+				IndexName: btcjson.String("txindex"),
+			},
+		},
+		{
 			name: "getinfo",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("getinfo")

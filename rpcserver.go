@@ -175,6 +175,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"getgenerate":           handleGetGenerate,
 	"gethashespersec":       handleGetHashesPerSec,
 	"getheaders":            handleGetHeaders,
+	"getindexinfo":          handleGetIndexInfo,
 	"getinfo":               handleGetInfo,
 	"getmempoolinfo":        handleGetMempoolInfo,
 	"getmininginfo":         handleGetMiningInfo,
@@ -309,6 +310,7 @@ var rpcLimited = map[string]struct{}{
 	"getdsproofscore":       {},
 	"getfinalizedblockhash": {},
 	"getheaders":            {},
+	"getindexinfo":          {},
 	"getinfo":               {},
 	"getnettotals":          {},
 	"getnetworkhashps":      {},
@@ -3362,6 +3364,72 @@ func handleGetHeaders(s *rpcServer, cmd interface{}, closeNotifier <-chan struct
 		buf.Reset()
 	}
 	return hexBlockHeaders, nil
+}
+
+// handleGetIndexInfo implements the getindexinfo command.
+func handleGetIndexInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.GetIndexInfoCmd)
+
+	// The indexes the node runs, each named as the option that enables or
+	// drops it.
+	type namedIndex struct {
+		name    string
+		indexer indexers.Indexer
+	}
+	var indexes []namedIndex
+	if s.cfg.TxIndex != nil {
+		indexes = append(indexes, namedIndex{"txindex", s.cfg.TxIndex})
+	}
+	if s.cfg.AddrIndex != nil {
+		indexes = append(indexes, namedIndex{"addrindex", s.cfg.AddrIndex})
+	}
+	if s.cfg.CfIndex != nil {
+		indexes = append(indexes, namedIndex{"cfindex", s.cfg.CfIndex})
+	}
+	if s.cfg.SlpIndex != nil {
+		indexes = append(indexes, namedIndex{"slpindex", s.cfg.SlpIndex})
+	}
+	if s.cfg.BcmrIndex != nil {
+		indexes = append(indexes, namedIndex{"bcmrindex", s.cfg.BcmrIndex})
+	}
+
+	// The chain moves the tip of each index along with its own, so an
+	// index is synced when its tip is the best block, which an index that
+	// starts after a later block isn't until the chain reaches that block.
+	// The BCMR index is synced once its walker has also walked behind every
+	// publication.  As in Bitcoin Cash Node, an empty name is no filter.
+	best := s.cfg.Chain.BestSnapshot()
+	result := make(map[string]btcjson.GetIndexInfoResult)
+	err := s.cfg.DB.View(func(dbTx database.Tx) error {
+		for _, index := range indexes {
+			if c.IndexName != nil && *c.IndexName != "" &&
+				*c.IndexName != index.name {
+
+				continue
+			}
+			hash, height, err := indexers.FetchIndexTip(dbTx, index.indexer)
+			if err != nil {
+				return err
+			}
+			synced := hash.IsEqual(&best.Hash)
+			if bcmrIndex, ok := index.indexer.(*indexers.BcmrIndex); ok && synced {
+				pending, err := bcmrIndex.WalkPending(dbTx)
+				if err != nil {
+					return err
+				}
+				synced = !pending
+			}
+			result[index.name] = btcjson.GetIndexInfoResult{
+				Synced:          synced,
+				BestBlockHeight: height,
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, internalRPCError(err.Error(), "Failed to read the index tips")
+	}
+	return result, nil
 }
 
 // isTestNet returns whether the params are for a public test network, as

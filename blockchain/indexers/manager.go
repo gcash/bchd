@@ -83,6 +83,13 @@ func dbFetchIndexerTip(dbTx database.Tx, idxKey []byte) (*chainhash.Hash, int32,
 	return &hash, height, nil
 }
 
+// FetchIndexTip uses an existing database transaction to retrieve the hash
+// and height of the latest block that the passed index has indexed, or, while
+// the chain is before the block an index starts after, that block.
+func FetchIndexTip(dbTx database.Tx, indexer Indexer) (*chainhash.Hash, int32, error) {
+	return dbFetchIndexerTip(dbTx, indexer.Key())
+}
+
 // dbIndexConnectBlock adds all of the index entries associated with the
 // given block using the provided indexer and updates the tip of the indexer
 // accordingly.  An error will be returned if the current tip for the indexer is

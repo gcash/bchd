@@ -301,6 +301,51 @@ func TestBcmrWalk(t *testing.T) {
 	c.checkPending()
 }
 
+// TestBcmrWalkPending checks that WalkPending reports a segment left for the
+// walker until the walker walks behind it, and that FetchIndexTip gives the
+// block the index connected last.
+func TestBcmrWalkPending(t *testing.T) {
+	c := newBcmrTestChain(t, 0)
+	check := func(wantPending bool, wantTip *bchutil.Block) {
+		t.Helper()
+		err := c.db.View(func(dbTx database.Tx) error {
+			pending, err := c.idx.WalkPending(dbTx)
+			if err != nil {
+				return err
+			}
+			if pending != wantPending {
+				t.Errorf("walk pending %v, want %v", pending, wantPending)
+			}
+			hash, height, err := FetchIndexTip(dbTx, c.idx)
+			if err != nil {
+				return err
+			}
+			if *hash != *wantTip.Hash() || height != wantTip.Height() {
+				t.Errorf("index tip %v at %d, want %v at %d", hash, height,
+					wantTip.Hash(), wantTip.Height())
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	check(false, c.blocks[0])
+
+	// p publishes, spending the identity output of r, which the index
+	// doesn't track until the walker goes behind p.
+	r := bcmrTestTx([]wire.OutPoint{c.funding()}, bcmrOut())
+	c.connect(true, r)
+	p := bcmrTestTx([]wire.OutPoint{bcmrOutPoint(r)}, bcmrOut(), bcmrPub(1, "p.example"))
+	tip := c.connect(true, p)
+	c.checkPending(p)
+	check(true, tip)
+
+	c.walk()
+	c.checkPending()
+	check(false, tip)
+}
+
 // TestBcmrWalkAuthbase checks that the walker goes behind a token's authbase
 // that spends an identity output the index doesn't track, when the genesis
 // publishes.
