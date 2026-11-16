@@ -100,6 +100,18 @@ func (idx *BcmrIndex) StopWalker() {
 	idx.wg.Wait()
 }
 
+// WalkPending uses an existing database transaction to return whether
+// connecting a block left segments that the walker has yet to walk behind, so
+// that some of the transactions behind their publications don't answer as
+// authbases yet.
+func (idx *BcmrIndex) WalkPending(dbTx database.Tx) (bool, error) {
+	w, err := newBcmrWriter(dbTx)
+	if err != nil {
+		return false, err
+	}
+	return w.buckets[bcmrPending].Cursor().First(), nil
+}
+
 // signalWalker wakes the walker.
 func (idx *BcmrIndex) signalWalker() {
 	select {

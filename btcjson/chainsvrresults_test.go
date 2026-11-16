@@ -149,6 +149,19 @@ func TestChainSvrCustomResults(t *testing.T) {
 			result:   &btcjson.ValidateAddressChainResult{},
 			expected: `{"isvalid":false}`,
 		},
+		{
+			name: "getindexinfo",
+			result: map[string]btcjson.GetIndexInfoResult{
+				"txindex":   {Synced: true, BestBlockHeight: 812345},
+				"bcmrindex": {Synced: false, BestBlockHeight: 0},
+			},
+			expected: `{"bcmrindex":{"synced":false,"best_block_height":0},"txindex":{"synced":true,"best_block_height":812345}}`,
+		},
+		{
+			name:     "getindexinfo without indexes",
+			result:   map[string]btcjson.GetIndexInfoResult{},
+			expected: `{}`,
+		},
 	}
 
 	t.Logf("Running %d tests", len(tests))

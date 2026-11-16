@@ -265,6 +265,13 @@ type GetDSProofResult struct {
 	Spenders    []DSProofSpender `json:"spenders,omitempty"`
 }
 
+// GetIndexInfoResult models the data of an index returned from the
+// getindexinfo command, which keys it by the name of the index.
+type GetIndexInfoResult struct {
+	Synced          bool  `json:"synced"`
+	BestBlockHeight int32 `json:"best_block_height"`
+}
+
 // GetMempoolInfoResult models the data returned from the getmempoolinfo
 // command.
 type GetMempoolInfoResult struct {

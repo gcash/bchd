@@ -742,6 +742,22 @@ func NewGetHashesPerSecCmd() *GetHashesPerSecCmd {
 	return &GetHashesPerSecCmd{}
 }
 
+// GetIndexInfoCmd defines the getindexinfo JSON-RPC command.
+type GetIndexInfoCmd struct {
+	IndexName *string
+}
+
+// NewGetIndexInfoCmd returns a new instance which can be used to issue a
+// getindexinfo JSON-RPC command.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewGetIndexInfoCmd(indexName *string) *GetIndexInfoCmd {
+	return &GetIndexInfoCmd{
+		IndexName: indexName,
+	}
+}
+
 // GetInfoCmd defines the getinfo JSON-RPC command.
 type GetInfoCmd struct{}
 
@@ -1209,6 +1225,7 @@ func init() {
 	MustRegisterCmd("getfinalizedblockhash", (*GetFinalizedBlockHashCmd)(nil), flags)
 	MustRegisterCmd("getgenerate", (*GetGenerateCmd)(nil), flags)
 	MustRegisterCmd("gethashespersec", (*GetHashesPerSecCmd)(nil), flags)
+	MustRegisterCmd("getindexinfo", (*GetIndexInfoCmd)(nil), flags)
 	MustRegisterCmd("getinfo", (*GetInfoCmd)(nil), flags)
 	MustRegisterCmd("getmempoolentry", (*GetMempoolEntryCmd)(nil), flags)
 	MustRegisterCmd("getmempoolinfo", (*GetMempoolInfoCmd)(nil), flags)

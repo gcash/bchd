@@ -595,6 +595,17 @@ var helpDescsEnUS = map[string]string{
 	"getheaders-hashstop":      "Block hash to stop including block headers for; if not found, all headers to the latest known block are returned.",
 	"getheaders--result0":      "Serialized block headers of all located blocks, limited to some arbitrary maximum number of hashes (currently 2000, which matches the wire protocol headers message, but this is not guaranteed)",
 
+	// GetIndexInfoCmd help.
+	"getindexinfo--synopsis":       "Returns the status of one or all of the indexes the node runs: txindex, addrindex, cfindex, slpindex and bcmrindex, each named as the option that enables or drops it.",
+	"getindexinfo-indexname":       "Only the index of this name, or none if the node doesn't run it; an empty name lists all of them",
+	"getindexinfo--result0--desc":  "The status of each index, keyed by its name",
+	"getindexinfo--result0--key":   "The name of the index",
+	"getindexinfo--result0--value": "The status of the index",
+
+	// GetIndexInfoResult help.
+	"getindexinforesult-synced":            "Whether the index has indexed the best block of the chain, and for the BCMR index whether its walker has also walked behind every publication",
+	"getindexinforesult-best_block_height": "The height of the latest block the index has indexed, or, for an index that starts after a later block, that block's height until the chain reaches it",
+
 	// GetInfoCmd help.
 	"getinfo--synopsis": "Returns a JSON object containing various state info.",
 
@@ -995,6 +1006,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getgenerate":           {(*bool)(nil)},
 	"gethashespersec":       {(*float64)(nil)},
 	"getheaders":            {(*[]string)(nil)},
+	"getindexinfo":          {(*map[string]btcjson.GetIndexInfoResult)(nil)},
 	"getinfo":               {(*btcjson.InfoChainResult)(nil)},
 	"getmempoolinfo":        {(*btcjson.GetMempoolInfoResult)(nil)},
 	"getmininginfo":         {(*btcjson.GetMiningInfoResult)(nil)},
