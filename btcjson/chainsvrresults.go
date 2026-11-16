@@ -74,6 +74,38 @@ type GetBlockVerboseTxResult struct {
 	NextHash      string        `json:"nextblockhash,omitempty"`
 }
 
+// GetBlockStatsResult models the data from the getblockstats command when no
+// statistics are selected.  Amounts are in BCH and fee rates in BCH per byte,
+// as in Bitcoin Cash Node.  With statistics selected, the command returns an
+// object of only those.
+type GetBlockStatsResult struct {
+	AvgFee             float64   `json:"avgfee"`
+	AvgFeeRate         float64   `json:"avgfeerate"`
+	AvgTxSize          int64     `json:"avgtxsize"`
+	BlockHash          string    `json:"blockhash"`
+	FeeRatePercentiles []float64 `json:"feerate_percentiles"`
+	Height             int64     `json:"height"`
+	Ins                int64     `json:"ins"`
+	MaxFee             float64   `json:"maxfee"`
+	MaxFeeRate         float64   `json:"maxfeerate"`
+	MaxTxSize          int64     `json:"maxtxsize"`
+	MedianFee          float64   `json:"medianfee"`
+	MedianTime         int64     `json:"mediantime"`
+	MedianTxSize       int64     `json:"mediantxsize"`
+	MinFee             float64   `json:"minfee"`
+	MinFeeRate         float64   `json:"minfeerate"`
+	MinTxSize          int64     `json:"mintxsize"`
+	Outs               int64     `json:"outs"`
+	Subsidy            float64   `json:"subsidy"`
+	Time               int64     `json:"time"`
+	TotalOut           float64   `json:"total_out"`
+	TotalSize          int64     `json:"total_size"`
+	TotalFee           float64   `json:"totalfee"`
+	Txs                int64     `json:"txs"`
+	UTXOIncrease       int64     `json:"utxo_increase"`
+	UTXOSizeIncrease   int64     `json:"utxo_size_inc"`
+}
+
 // AddMultisigAddressResult models the data returned from the addmultisigaddress
 // command.
 type AddMultisigAddressResult struct {
