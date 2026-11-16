@@ -134,6 +134,13 @@ type MessageListeners struct {
 	// message.
 	OnCFCheckpt func(p *Peer, msg *wire.MsgCFCheckpt)
 
+	// OnMpFilter is invoked when a peer receives an mpfilter bitcoin
+	// message.
+	OnMpFilter func(p *Peer, msg *wire.MsgMpFilter)
+
+	// OnMpTxs is invoked when a peer receives an mptxs bitcoin message.
+	OnMpTxs func(p *Peer, msg *wire.MsgMpTxs)
+
 	// OnInv is invoked when a peer receives an inv bitcoin message.
 	OnInv func(p *Peer, msg *wire.MsgInv)
 
@@ -170,6 +177,18 @@ type MessageListeners struct {
 	// OnGetCFMempool is invoked when a peer receives a getcfmempool
 	// bitcoin message.
 	OnGetCFMempool func(p *Peer, msg *wire.MsgGetCFMempool)
+
+	// OnSendMpFilter is invoked when a peer receives a sendmpfilter
+	// bitcoin message.
+	OnSendMpFilter func(p *Peer, msg *wire.MsgSendMpFilter)
+
+	// OnGetMpFilters is invoked when a peer receives a getmpfilters
+	// bitcoin message.
+	OnGetMpFilters func(p *Peer, msg *wire.MsgGetMpFilters)
+
+	// OnGetMpTxs is invoked when a peer receives a getmptxs bitcoin
+	// message.
+	OnGetMpTxs func(p *Peer, msg *wire.MsgGetMpTxs)
 
 	// OnFeeFilter is invoked when a peer receives a feefilter bitcoin message.
 	OnFeeFilter func(p *Peer, msg *wire.MsgFeeFilter)
@@ -1821,6 +1840,21 @@ out:
 				p.cfg.Listeners.OnGetCFMempool(p, msg)
 			}
 
+		case *wire.MsgSendMpFilter:
+			if p.cfg.Listeners.OnSendMpFilter != nil {
+				p.cfg.Listeners.OnSendMpFilter(p, msg)
+			}
+
+		case *wire.MsgGetMpFilters:
+			if p.cfg.Listeners.OnGetMpFilters != nil {
+				p.cfg.Listeners.OnGetMpFilters(p, msg)
+			}
+
+		case *wire.MsgGetMpTxs:
+			if p.cfg.Listeners.OnGetMpTxs != nil {
+				p.cfg.Listeners.OnGetMpTxs(p, msg)
+			}
+
 		case *wire.MsgCFilter:
 			if p.cfg.Listeners.OnCFilter != nil {
 				p.cfg.Listeners.OnCFilter(p, msg)
@@ -1829,6 +1863,16 @@ out:
 		case *wire.MsgCFHeaders:
 			if p.cfg.Listeners.OnCFHeaders != nil {
 				p.cfg.Listeners.OnCFHeaders(p, msg)
+			}
+
+		case *wire.MsgMpFilter:
+			if p.cfg.Listeners.OnMpFilter != nil {
+				p.cfg.Listeners.OnMpFilter(p, msg)
+			}
+
+		case *wire.MsgMpTxs:
+			if p.cfg.Listeners.OnMpTxs != nil {
+				p.cfg.Listeners.OnMpTxs(p, msg)
 			}
 
 		case *wire.MsgFeeFilter:
