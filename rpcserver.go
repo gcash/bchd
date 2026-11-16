@@ -2049,6 +2049,45 @@ func getDifficultyRatio(bits uint32, params *chaincfg.Params) float64 {
 	return diff
 }
 
+// chainWorkHex returns the chain work as BCHN writes it: 64 hexadecimal digits.
+func chainWorkHex(work *big.Int) string {
+	return fmt.Sprintf("%064x", work)
+}
+
+// blockIndexFields returns the median time past of the block with the passed
+// hash and the work of its chain, as BCHN reads them from its block index.
+func blockIndexFields(chain *blockchain.BlockChain, hash *chainhash.Hash) (int64, string, error) {
+	medianTime, err := chain.MedianTimeByHash(hash)
+	if err != nil {
+		return 0, "", err
+	}
+	work, err := chain.ChainWorkByHash(hash)
+	if err != nil {
+		return 0, "", err
+	}
+	return medianTime.Unix(), chainWorkHex(work), nil
+}
+
+// fetchBlockTxCount returns the number of transactions of the stored block
+// with the passed hash, which follows the header in the stored block, so that
+// the rest of the block isn't read.
+func fetchBlockTxCount(db database.DB, hash *chainhash.Hash) (uint64, error) {
+	var numTx uint64
+	err := db.View(func(dbTx database.Tx) error {
+		countBytes, err := dbTx.FetchBlockRegion(&database.BlockRegion{
+			Hash:   hash,
+			Offset: wire.MaxBlockHeaderPayload,
+			Len:    wire.MaxVarIntPayload,
+		})
+		if err != nil {
+			return err
+		}
+		numTx, err = wire.ReadVarInt(bytes.NewReader(countBytes), 0)
+		return err
+	})
+	return numTx, err
+}
+
 // handleGetBlock implements the getblock command.
 func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	c := cmd.(*btcjson.GetBlockCmd)
@@ -2105,6 +2144,12 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		nextHashString = nextHash.String()
 	}
 
+	medianTime, chainWork, err := blockIndexFields(s.cfg.Chain, hash)
+	if err != nil {
+		context := "Failed to obtain block index fields"
+		return nil, internalRPCError(err.Error(), context)
+	}
+
 	params := s.cfg.ChainParams
 	blockHeader := &blk.MsgBlock().Header
 	blockReply := btcjson.GetBlockVerboseResult{
@@ -2115,11 +2160,14 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 		PreviousHash:  blockHeader.PrevBlock.String(),
 		Nonce:         blockHeader.Nonce,
 		Time:          blockHeader.Timestamp.Unix(),
+		MedianTime:    medianTime,
 		Confirmations: int64(1 + best.Height - blockHeight),
 		Height:        int64(blockHeight),
 		Size:          int32(len(blkBytes)),
 		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
 		Difficulty:    getDifficultyRatio(blockHeader.Bits, params),
+		ChainWork:     chainWork,
+		NTx:           uint64(len(blk.Transactions())),
 		NextHash:      nextHashString,
 	}
 
@@ -2162,9 +2210,12 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}
 				MerkleRoot:    blockReply.MerkleRoot,
 				Tx:            rawTxns,
 				Time:          blockReply.Time,
+				MedianTime:    blockReply.MedianTime,
 				Nonce:         blockReply.Nonce,
 				Bits:          blockReply.Bits,
 				Difficulty:    blockReply.Difficulty,
+				ChainWork:     blockReply.ChainWork,
+				NTx:           blockReply.NTx,
 				PreviousHash:  blockReply.PreviousHash,
 				NextHash:      blockReply.NextHash,
 			}, nil
@@ -2306,25 +2357,40 @@ func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan
 	params := s.cfg.ChainParams
 	chain := s.cfg.Chain
 	chainSnapshot := chain.BestSnapshot()
+	tipWork, err := chain.ChainWorkByHash(&chainSnapshot.Hash)
+	if err != nil {
+		context := "Failed to obtain the chain work"
+		return nil, internalRPCError(err.Error(), context)
+	}
 
-	// Estimate the verification (sync) progress of the node.
+	// The headers are counted to the best header, the tip's or that of a
+	// block whose header the chain keeps until the block arrives, as BCHN
+	// counts them.
+	headers := chain.BestHeader().Height
+
+	// Estimate the verification (sync) progress of the node, as the share
+	// of the best known chain it has, the sync peer's or that of the best
+	// header, so that a node without peers that has every block it knows
+	// of isn't reported as not having started.
 	syncHeight := s.cfg.SyncMgr.SyncHeight()
+	knownHeight := max(syncHeight, uint64(headers))
 	var verifyProgress float64
-	if syncHeight > 0 {
-		verifyProgress = math.Min(float64(chainSnapshot.Height)/float64(syncHeight), 1.0)
+	if knownHeight > 0 {
+		verifyProgress = math.Min(float64(chainSnapshot.Height)/float64(knownHeight), 1.0)
 	}
 
 	chainInfo := &btcjson.GetBlockChainInfoResult{
 		Chain:                params.Name,
 		Blocks:               chainSnapshot.Height,
-		Headers:              chainSnapshot.Height,
+		Headers:              headers,
 		BestBlockHash:        chainSnapshot.Hash.String(),
 		Difficulty:           getDifficultyRatio(chainSnapshot.Bits, params),
 		MedianTime:           chainSnapshot.MedianTime.Unix(),
-		Pruned:               false,
+		Pruned:               chain.PruneMode(),
 		Bip9SoftForks:        make(map[string]*btcjson.Bip9SoftForkDescription),
 		VerificationProgress: verifyProgress,
 		InitialBlockDownload: chain.IsInitialBlockDownload(),
+		ChainWork:            chainWorkHex(tipWork),
 		SyncHeight:           syncHeight,
 	}
 
@@ -2486,6 +2552,21 @@ func handleGetBlockHeader(s *rpcServer, cmd interface{}, closeNotifier <-chan st
 		nextHashString = nextHash.String()
 	}
 
+	medianTime, chainWork, err := blockIndexFields(s.cfg.Chain, hash)
+	if err != nil {
+		context := "Failed to obtain block index fields"
+		return nil, internalRPCError(err.Error(), context)
+	}
+
+	// The number of transactions is read from the stored block.  It is 0
+	// when the block's data is not stored, as BCHN gives for a block it has
+	// only the header of, and so for a pruned block too, whose number BCHN
+	// still has.
+	numTx, err := fetchBlockTxCount(s.cfg.DB, hash)
+	if err != nil {
+		numTx = 0
+	}
+
 	params := s.cfg.ChainParams
 	blockHeaderReply := btcjson.GetBlockHeaderVerboseResult{
 		Hash:          c.Hash,
@@ -2498,8 +2579,11 @@ func handleGetBlockHeader(s *rpcServer, cmd interface{}, closeNotifier <-chan st
 		PreviousHash:  blockHeader.PrevBlock.String(),
 		Nonce:         uint64(blockHeader.Nonce),
 		Time:          blockHeader.Timestamp.Unix(),
+		MedianTime:    medianTime,
 		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
 		Difficulty:    getDifficultyRatio(blockHeader.Bits, params),
+		ChainWork:     chainWork,
+		NTx:           numTx,
 	}
 	return blockHeaderReply, nil
 }
@@ -4144,21 +4228,8 @@ func handleVerifyTxOutProof(s *rpcServer, cmd interface{}, closeNotifier <-chan 
 	}
 
 	// The matches only count when the proof has as many transactions as
-	// the block.  The count follows the header in the stored block, and
-	// the check is skipped when the block data can't be read.
-	var numTx uint64
-	err = s.cfg.DB.View(func(dbTx database.Tx) error {
-		countBytes, err := dbTx.FetchBlockRegion(&database.BlockRegion{
-			Hash:   &blkHash,
-			Offset: wire.MaxBlockHeaderPayload,
-			Len:    wire.MaxVarIntPayload,
-		})
-		if err != nil {
-			return err
-		}
-		numTx, err = wire.ReadVarInt(bytes.NewReader(countBytes), 0)
-		return err
-	})
+	// the block.  The check is skipped when the block data can't be read.
+	numTx, err := fetchBlockTxCount(s.cfg.DB, &blkHash)
 	if err == nil && numTx != uint64(msg.Transactions) {
 		return []string{}, nil
 	}

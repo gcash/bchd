@@ -622,3 +622,63 @@ func TestHaveHeader(t *testing.T) {
 		}
 	}
 }
+
+// TestBestHeader ensures the best header is the tip's or the kept header with
+// the most work, the tip's or the one kept first of those with the same work,
+// leaving out a chain with a block known to be invalid.
+func TestBestHeader(t *testing.T) {
+	chain, nodes := headerTestChain(t, 3)
+	bits := chain.chainParams.PowLimitBits
+	tip := nodes[3]
+
+	// best fails the test unless the best header is the one with the passed
+	// hash and height, whose work compares with the tip's as workCmp does.
+	best := func(name string, hash chainhash.Hash, height int32, workCmp int) {
+		t.Helper()
+		got := chain.BestHeader()
+		if got.Hash != hash || got.Height != height || got.WorkCmp != workCmp {
+			t.Fatalf("%s: got %v at height %d, work compared %d, want %v "+
+				"at height %d, %d", name, got.Hash, got.Height,
+				got.WorkCmp, hash, height, workCmp)
+		}
+	}
+	best("no kept headers", tip.hash, 3, 0)
+
+	processHeaders(t, chain, 1,
+		testHeader(nodes[1].hash, after(nodes[1], 11*time.Minute), bits, 0))
+	processHeaders(t, chain, 1,
+		testHeader(nodes[2].hash, after(nodes[2], 11*time.Minute), bits, 0))
+	best("kept headers with less work and the tip's", tip.hash, 3, 0)
+
+	h4 := testHeader(tip.hash, after(tip, 10*time.Minute), bits, 0)
+	h5 := testHeader(hashOf(h4), headerAfter(h4, 10*time.Minute), bits, 0)
+	processHeaders(t, chain, 2, h4, h5)
+	best("kept headers on the tip", hashOf(h5), 5, 1)
+	got := chain.BestHeader()
+	want := new(big.Int).Add(tip.workSum, new(big.Int).Mul(big.NewInt(2),
+		CalcWork(bits)))
+	if got.Work.Cmp(want) != 0 {
+		t.Fatalf("got work %v, want %v", got.Work, want)
+	}
+	processHeaders(t, chain, 1,
+		testHeader(hashOf(h4), headerAfter(h4, 10*time.Minute), bits, 1))
+	best("a later header with the same work", hashOf(h5), 5, 1)
+
+	// A longer chain of kept headers on a side block is the best until the
+	// side block is found invalid.
+	side := newFakeNode(nodes[1], 4, bits, after(nodes[1], 11*time.Minute))
+	side.status = statusDataStored
+	chain.index.AddNode(side)
+	prev := side.Header()
+	var sideHeaders []*wire.BlockHeader
+	for range 4 {
+		next := testHeader(hashOf(&prev), headerAfter(&prev, 10*time.Minute),
+			bits, 0)
+		sideHeaders = append(sideHeaders, next)
+		prev = *next
+	}
+	processHeaders(t, chain, 3, sideHeaders...)
+	best("kept headers on a side block", hashOf(&prev), 6, 1)
+	chain.index.SetStatusFlags(side, statusValidateFailed)
+	best("kept headers on an invalid block", hashOf(h5), 5, 1)
+}

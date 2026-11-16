@@ -440,6 +440,40 @@ func (b *BlockChain) HaveHeader(hash *chainhash.Hash) bool {
 	return b.index.LookupNode(hash) != nil || b.headers.lookup(hash) != nil
 }
 
+// BestHeader returns the state of the header with the most work the chain
+// knows, as BCHN's best header: the tip's, or a kept header's whose chain has
+// more work and no block known to be invalid.  Of headers with the same work,
+// the tip's comes first, and then the one kept first, as in BCHN.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) BestHeader() *HeaderState {
+	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
+
+	tip := b.bestChain.Tip()
+	best := tip
+	var bestEntry *headerEntry
+
+	// The header with the most work of a chain is a leaf, as each header
+	// adds work.
+	for _, e := range b.headers.leaves.entries {
+		cmp := e.node.workSum.Cmp(best.workSum)
+		if cmp < 0 || cmp == 0 && (bestEntry == nil || e.seq > bestEntry.seq) {
+			continue
+		}
+		if b.headerChainInvalid(e.node) {
+			continue
+		}
+		best, bestEntry = e.node, e
+	}
+	return &HeaderState{
+		Hash:    best.hash,
+		Height:  best.height,
+		Work:    new(big.Int).Set(best.workSum),
+		WorkCmp: best.workSum.Cmp(tip.workSum),
+	}
+}
+
 // headerChainInvalid returns whether the first block in node's chain that is
 // not a kept header is known to be invalid.
 //

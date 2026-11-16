@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -363,9 +364,13 @@ func getBlockTestBlock(t *testing.T) (*bchutil.Block, []blockchain.SpentTxOut) {
 }
 
 // getBlockTestReply returns the getblock result for the passed block, with the
-// block fields set the same way handleGetBlock sets them.
+// block fields set the same way handleGetBlock sets them.  The block is in no
+// block index, so its median time past and chain work are those of a chain of
+// blocks ten minutes apart with its difficulty.
 func getBlockTestReply(blk *bchutil.Block) btcjson.GetBlockVerboseResult {
 	blockHeader := &blk.MsgBlock().Header
+	work := new(big.Int).Mul(big.NewInt(int64(blk.Height())+1),
+		blockchain.CalcWork(blockHeader.Bits))
 	return btcjson.GetBlockVerboseResult{
 		Hash:          blk.Hash().String(),
 		Version:       blockHeader.Version,
@@ -374,12 +379,15 @@ func getBlockTestReply(blk *bchutil.Block) btcjson.GetBlockVerboseResult {
 		PreviousHash:  blockHeader.PrevBlock.String(),
 		Nonce:         blockHeader.Nonce,
 		Time:          blockHeader.Timestamp.Unix(),
+		MedianTime:    blockHeader.Timestamp.Add(-50 * time.Minute).Unix(),
 		Confirmations: int64(1 + getBlockTestBestHeight - blk.Height()),
 		Height:        int64(blk.Height()),
 		Size:          int32(blk.MsgBlock().SerializeSize()),
 		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
 		Difficulty: getDifficultyRatio(blockHeader.Bits,
 			&chaincfg.MainNetParams),
+		ChainWork: chainWorkHex(work),
+		NTx:       uint64(len(blk.Transactions())),
 	}
 }
 
@@ -422,7 +430,8 @@ func assertGolden(t *testing.T, name string, result interface{}) {
 
 // TestGetBlockVerbosity1And2 ensures the getblock results for verbosity 1 and
 // 2 match their golden files, generated from the results before verbosity 3
-// was added, with the fees of verbosity 2 that BCHN gives too.
+// was added, with the fees of verbosity 2 and the mediantime, chainwork and
+// nTx fields that BCHN gives too.
 func TestGetBlockVerbosity1And2(t *testing.T) {
 	blk, stxos := getBlockTestBlock(t)
 
@@ -463,9 +472,12 @@ func TestGetBlockVerbosity3(t *testing.T) {
 		MerkleRoot:    reply.MerkleRoot,
 		Tx:            rawTxns,
 		Time:          reply.Time,
+		MedianTime:    reply.MedianTime,
 		Nonce:         reply.Nonce,
 		Bits:          reply.Bits,
 		Difficulty:    reply.Difficulty,
+		ChainWork:     reply.ChainWork,
+		NTx:           reply.NTx,
 		PreviousHash:  reply.PreviousHash,
 	})
 }

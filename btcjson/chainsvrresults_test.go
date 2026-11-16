@@ -296,3 +296,125 @@ func TestTokenDataResults(t *testing.T) {
 		}
 	}
 }
+
+// TestBlockIndexFieldResults ensures the getblock and getblockheader results
+// marshal the mediantime, chainwork and nTx fields where Bitcoin Cash Node
+// puts them, and that the getblockchaininfo result always has its
+// verificationprogress, which Bitcoin Cash Node gives even when it is 0, and
+// its chainwork after initialblockdownload, as there.
+func TestBlockIndexFieldResults(t *testing.T) {
+	t.Parallel()
+
+	const work = "00000000000000000000000000000000000000000000000000000000000000ce"
+	tests := []struct {
+		name     string
+		result   interface{}
+		expected string
+	}{
+		{
+			name: "getblockheader",
+			result: &btcjson.GetBlockHeaderVerboseResult{
+				Hash:          "h",
+				Confirmations: 1,
+				Height:        102,
+				Version:       4,
+				VersionHex:    "00000004",
+				MerkleRoot:    "m",
+				Time:          1700000000,
+				MedianTime:    1699997000,
+				Nonce:         7,
+				Bits:          "207fffff",
+				Difficulty:    1,
+				ChainWork:     work,
+				NTx:           2,
+				PreviousHash:  "p",
+			},
+			expected: `{"hash":"h","confirmations":1,"height":102,"version":4,` +
+				`"versionHex":"00000004","merkleroot":"m","time":1700000000,` +
+				`"mediantime":1699997000,"nonce":7,"bits":"207fffff",` +
+				`"difficulty":1,"chainwork":"` + work + `","nTx":2,` +
+				`"previousblockhash":"p"}`,
+		},
+		{
+			name: "getblock verbosity 1",
+			result: &btcjson.GetBlockVerboseResult{
+				Hash:          "h",
+				Confirmations: 1,
+				Size:          285,
+				Height:        102,
+				Version:       4,
+				VersionHex:    "00000004",
+				MerkleRoot:    "m",
+				Tx:            []string{"a", "b"},
+				Time:          1700000000,
+				MedianTime:    1699997000,
+				Nonce:         7,
+				Bits:          "207fffff",
+				Difficulty:    1,
+				ChainWork:     work,
+				NTx:           2,
+				PreviousHash:  "p",
+			},
+			expected: `{"hash":"h","confirmations":1,"strippedsize":0,"size":285,` +
+				`"height":102,"version":4,"versionHex":"00000004",` +
+				`"merkleroot":"m","tx":["a","b"],"time":1700000000,` +
+				`"mediantime":1699997000,"nonce":7,"bits":"207fffff",` +
+				`"difficulty":1,"chainwork":"` + work + `","nTx":2,` +
+				`"previousblockhash":"p"}`,
+		},
+		{
+			name: "getblock verbosity 3",
+			result: &btcjson.GetBlockVerboseTxResult{
+				Hash:          "h",
+				Confirmations: 1,
+				Size:          285,
+				Height:        102,
+				Version:       4,
+				VersionHex:    "00000004",
+				MerkleRoot:    "m",
+				Time:          1700000000,
+				MedianTime:    1699997000,
+				Nonce:         7,
+				Bits:          "207fffff",
+				Difficulty:    1,
+				ChainWork:     work,
+				NTx:           2,
+				PreviousHash:  "p",
+				NextHash:      "n",
+			},
+			expected: `{"hash":"h","confirmations":1,"strippedsize":0,"size":285,` +
+				`"height":102,"version":4,"versionHex":"00000004",` +
+				`"merkleroot":"m","time":1700000000,"mediantime":1699997000,` +
+				`"nonce":7,"bits":"207fffff","difficulty":1,` +
+				`"chainwork":"` + work + `","nTx":2,` +
+				`"previousblockhash":"p","nextblockhash":"n"}`,
+		},
+		{
+			name: "getblockchaininfo",
+			result: &btcjson.GetBlockChainInfoResult{
+				Chain:         "regtest",
+				BestBlockHash: "h",
+				Difficulty:    1,
+				MedianTime:    1231006505,
+				ChainWork:     work,
+			},
+			expected: `{"chain":"regtest","blocks":0,"headers":0,` +
+				`"bestblockhash":"h","difficulty":1,"mediantime":1231006505,` +
+				`"verificationprogress":0,"initialblockdownload":false,` +
+				`"chainwork":"` + work + `","pruned":false,` +
+				`"softforks":null,"bip9_softforks":null}`,
+		},
+	}
+
+	for _, test := range tests {
+		marshalled, err := json.Marshal(test.result)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", test.name, err)
+			continue
+		}
+		if string(marshalled) != test.expected {
+			t.Errorf("%s: unexpected marshalled data - got %s, "+
+				"want %s", test.name, marshalled, test.expected)
+		}
+	}
+}

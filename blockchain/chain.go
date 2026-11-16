@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1781,6 +1782,18 @@ func (b *BlockChain) MedianTimeByHash(hash *chainhash.Hash) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("no block with hash %s exists", hash)
 	}
 	return node.CalcPastMedianTime(), nil
+}
+
+// ChainWorkByHash returns the total work of the chain up to and including the
+// block with the provided hash if it is in the block index.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) ChainWorkByHash(hash *chainhash.Hash) (*big.Int, error) {
+	node := b.index.LookupNode(hash)
+	if node == nil {
+		return nil, fmt.Errorf("no block with hash %s exists", hash)
+	}
+	return new(big.Int).Set(node.workSum), nil
 }
 
 // HeightRange returns a range of block hashes for the given start and end
