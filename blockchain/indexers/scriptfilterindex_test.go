@@ -128,6 +128,30 @@ func TestScriptFilterIndex(t *testing.T) {
 		}
 	}
 
+	// A client that knows a transaction's ID finds its block: each block's
+	// filter holds the key of every transaction's ID, coinbase included,
+	// and not the key of a transaction of the other block.
+	for _, c := range []struct{ block, other *bchutil.Block }{{block0, block1}, {block1, block0}} {
+		served, _ := idx.FilterByBlockHash(c.block.Hash(), wire.GCSFilterScripts)
+		filter, _, err := builder.ParseScriptFilter(served)
+		if err != nil {
+			t.Fatal(err)
+		}
+		key := builder.DeriveKey(c.block.Hash())
+		for i, tx := range c.block.Transactions() {
+			txKey := builder.TxidKey(*tx.Hash())
+			if match, err := filter.Match(key, txKey[:]); err != nil || !match {
+				t.Fatalf("block %v's filter does not match the ID of its transaction %d: %v",
+					c.block.Hash(), i, err)
+			}
+		}
+		otherKey := builder.TxidKey(*c.other.Transactions()[0].Hash())
+		if match, err := filter.Match(key, otherKey[:]); err != nil || match {
+			t.Fatalf("block %v's filter matches the coinbase of block %v: %v",
+				c.block.Hash(), c.other.Hash(), err)
+		}
+	}
+
 	// Only the script filter type is served from this index.
 	if _, err := idx.FilterByBlockHash(block1.Hash(), wire.GCSFilterRegular); !errors.Is(err, errNotScriptFilter) {
 		t.Fatalf("basic filter type: got %v", err)
