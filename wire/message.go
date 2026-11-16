@@ -116,6 +116,8 @@ const (
 	CmdSendAddrV2   = "sendaddrv2"
 	CmdAddrV2       = "addrv2"
 	CmdDSProof      = "dsproof-beta"
+	CmdGetSHV       = "getshv"
+	CmdSHV          = "shv"
 )
 
 // MessageEncoding represents the wire message encoding format to be used.
@@ -260,6 +262,12 @@ func makeEmptyMessage(command string) (Message, error) {
 
 	case CmdDSProof:
 		msg = &MsgDSProof{}
+
+	case CmdGetSHV:
+		msg = &MsgGetSHV{}
+
+	case CmdSHV:
+		msg = &MsgSHV{}
 
 	default:
 		return nil, fmt.Errorf("unhandled command [%s]", command)

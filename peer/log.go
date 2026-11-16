@@ -212,6 +212,12 @@ func messageSummary(msg wire.Message) string {
 	case *wire.MsgGetCFMempool:
 		// No summary.
 
+	case *wire.MsgGetSHV:
+		return fmt.Sprintf("%d requests", len(msg.Requests))
+
+	case *wire.MsgSHV:
+		return fmt.Sprintf("%d responses", len(msg.Responses))
+
 	case *wire.MsgSendCmpct:
 		return fmt.Sprintf("announce=%v", msg.Announce)
 

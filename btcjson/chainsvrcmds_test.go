@@ -915,6 +915,21 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 		},
 		{
+			name: "getshv",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getshv", "root", 1000, 500)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetSHVCmd("root", 1000, 500)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getshv","params":["root",1000,500],"id":1}`,
+			unmarshalled: &btcjson.GetSHVCmd{
+				Type:             "root",
+				CommitmentHeight: 1000,
+				BlockHeight:      500,
+			},
+		},
+		{
 			name: "gettxout",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("gettxout", "123", 1)

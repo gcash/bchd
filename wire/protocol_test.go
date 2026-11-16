@@ -22,9 +22,9 @@ func TestServiceFlagStringer(t *testing.T) {
 		{SFNodeGraphene, "SFNodeGraphene"},
 		{SFNodeWeakBlocks, "SFNodeWeakBlocks"},
 		{SFNodeCF, "SFNodeCF"},
-		{SFNodeXThinner, "SFNodeXThinner"},
+		{SFNodeSHV, "SFNodeSHV"},
 		{SFNodeNetworkLimited, "SFNodeNetworkLimited"},
-		{0xffffffff, "SFNodeNetwork|SFNodeGetUTXO|SFNodeBloom|SFNodeWitness|SFNodeXthin|SFNodeBitcoinCash|SFNodeGraphene|SFNodeWeakBlocks|SFNodeCF|SFNodeXThinner|SFNodeNetworkLimited|0xfffff800"},
+		{0xffffffff, "SFNodeNetwork|SFNodeGetUTXO|SFNodeBloom|SFNodeWitness|SFNodeXthin|SFNodeBitcoinCash|SFNodeGraphene|SFNodeWeakBlocks|SFNodeCF|SFNodeSHV|SFNodeNetworkLimited|0xfffff800"},
 	}
 
 	t.Logf("Running %d tests", len(tests))
@@ -35,6 +35,22 @@ func TestServiceFlagStringer(t *testing.T) {
 				test.want)
 			continue
 		}
+	}
+}
+
+// TestSFNodeSHV ensures SFNodeSHV is bit 9, CHIP-2026-02's NODE_SHV, and that
+// the deprecated SFNodeXThinner, which named the bit before, still names it.
+func TestSFNodeSHV(t *testing.T) {
+	if SFNodeSHV != 1<<9 {
+		t.Errorf("SFNodeSHV is %#x, want %#x", uint64(SFNodeSHV), 1<<9)
+	}
+	if SFNodeXThinner != SFNodeSHV {
+		t.Errorf("SFNodeXThinner is %#x, want SFNodeSHV",
+			uint64(SFNodeXThinner))
+	}
+	if SFNodeNetworkLimited != 1<<10 {
+		t.Errorf("SFNodeNetworkLimited is %#x, want %#x",
+			uint64(SFNodeNetworkLimited), 1<<10)
 	}
 }
 

@@ -51,7 +51,7 @@ const (
 	// defaultServices describes the default services that are supported by
 	// the server.
 	defaultServices = wire.SFNodeNetwork | wire.SFNodeBloom |
-		wire.SFNodeCF | wire.SFNodeBitcoinCash
+		wire.SFNodeCF | wire.SFNodeBitcoinCash | wire.SFNodeSHV
 
 	// defaultRequiredServices describes the default services that are
 	// required to be supported by outbound peers.
@@ -335,6 +335,7 @@ type server struct {
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
 	slpIndex  *indexers.SlpIndex
+	shvIndex  *shvIndex
 	bcmrIndex *indexers.BcmrIndex
 
 	// The fee estimator keeps track of how long transactions are left in
@@ -2020,6 +2021,36 @@ func (sp *serverPeer) OnGetCFCheckpt(_ *peer.Peer, msg *wire.MsgGetCFCheckpt) {
 	sp.QueueMessage(checkptMsg, nil)
 }
 
+// OnGetSHV is invoked when a peer receives a getshv bitcoin message.  It
+// answers with one shv message holding one entry per request, in order, each
+// with a status (CHIP-2026-02).
+func (sp *serverPeer) OnGetSHV(_ *peer.Peer, msg *wire.MsgGetSHV) {
+	// A node that does not advertise SHV ignores the request without a
+	// word, as CHIP-2026-02 has it.
+	index := sp.server.shvIndex
+	if index == nil || sp.server.services&wire.SFNodeSHV == 0 {
+		peerLog.Debugf("Ignoring getshv from %s: SHV is disabled", sp)
+		return
+	}
+
+	// A getshv message of more requests than it may hold is answered with
+	// no entries and, as in BCHN, adds 20 to the peer's ban score.
+	if len(msg.Requests) > wire.MaxSHVRequestsPerMsg {
+		peerLog.Debugf("getshv with %d requests from %s",
+			len(msg.Requests), sp)
+		sp.addBanScore(20, 0, "getshv with more than "+
+			strconv.Itoa(wire.MaxSHVRequestsPerMsg)+" requests")
+		sp.QueueMessage(wire.NewMsgSHV(), nil)
+		return
+	}
+
+	responses := make([]wire.SHVResponse, len(msg.Requests))
+	for i := range msg.Requests {
+		responses[i] = index.response(&msg.Requests[i])
+	}
+	sp.QueueMessage(wire.NewMsgSHV(responses...), nil)
+}
+
 // enforceNodeBloomFlag disconnects the peer if the server is not configured to
 // allow bloom filters.  Additionally, if the peer has negotiated to a protocol
 // version  that is high enough to observe the bloom filter service support bit,
@@ -3445,6 +3476,7 @@ func newPeerConfig(sp *serverPeer) *peer.Config {
 			OnGetCFHeaders: sp.OnGetCFHeaders,
 			OnGetCFCheckpt: sp.OnGetCFCheckpt,
 			OnGetCFMempool: sp.OnGetCFMemPool,
+			OnGetSHV:       sp.OnGetSHV,
 			OnFeeFilter:    sp.OnFeeFilter,
 			OnFilterAdd:    sp.OnFilterAdd,
 			OnFilterClear:  sp.OnFilterClear,
@@ -4270,6 +4302,11 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 	if cfg.NoCFilters || cfg.FastSync {
 		services &^= wire.SFNodeCF
 	}
+	// The SHV index only needs the block hashes, which the block index
+	// holds from genesis also with --prune and --fastsync.
+	if cfg.NoSHV {
+		services &^= wire.SFNodeSHV
+	}
 
 	amgr := addrmgr.New(cfg.DataDir, bchdLookup)
 
@@ -4441,6 +4478,9 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		s.services &^= wire.SFNodeNetwork
 		s.services |= wire.SFNodeNetworkLimited
 	}
+
+	// Build the SHV index before the sync manager can connect blocks.
+	s.initSHVIndex(s.chain)
 
 	// Search for a FeeEstimator state in the database. If none can be found
 	// or if it cannot be loaded, create a new one.
@@ -4619,6 +4659,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			AddrIndex:      s.addrIndex,
 			CfIndex:        s.cfIndex,
 			SlpIndex:       s.slpIndex,
+			SHVIndex:       s.shvIndex,
 			BcmrIndex:      s.bcmrIndex,
 			FeeEstimator:   s.feeEstimator,
 			Services:       s.services,

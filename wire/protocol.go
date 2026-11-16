@@ -105,9 +105,10 @@ const (
 	// filters (CFs).
 	SFNodeCF
 
-	// SFNodeXThinner is a placeholder for the xthinner block compression protocol being
-	// developed by Johnathan Toomim.
-	SFNodeXThinner
+	// SFNodeSHV is a flag used to indicate a peer keeps a Merkle Mountain
+	// Range over the main chain's block hashes and answers getshv messages
+	// with header proofs for Simplified Header Verification (CHIP-2026-02).
+	SFNodeSHV
 
 	// SFNodeNetworkLimited is used to indicate the node is a pruned node and may only
 	// be capable of limited services. In particular it is only guaranteed to be able
@@ -115,6 +116,13 @@ const (
 	// if it has them.
 	SFNodeNetworkLimited
 )
+
+// SFNodeXThinner was a placeholder for the xthinner block compression
+// protocol, which bchd never implemented nor advertised.  CHIP-2026-02 assigns
+// its bit to SHV.
+//
+// Deprecated: Use SFNodeSHV, which has the same bit.
+const SFNodeXThinner = SFNodeSHV
 
 // Map of service flags back to their constant names for pretty printing.
 var sfStrings = map[ServiceFlag]string{
@@ -127,7 +135,7 @@ var sfStrings = map[ServiceFlag]string{
 	SFNodeGraphene:       "SFNodeGraphene",
 	SFNodeWeakBlocks:     "SFNodeWeakBlocks",
 	SFNodeCF:             "SFNodeCF",
-	SFNodeXThinner:       "SFNodeXThinner",
+	SFNodeSHV:            "SFNodeSHV",
 	SFNodeNetworkLimited: "SFNodeNetworkLimited",
 }
 
@@ -143,7 +151,7 @@ var orderedSFStrings = []ServiceFlag{
 	SFNodeGraphene,
 	SFNodeWeakBlocks,
 	SFNodeCF,
-	SFNodeXThinner,
+	SFNodeSHV,
 	SFNodeNetworkLimited,
 }
 
