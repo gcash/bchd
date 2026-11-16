@@ -19,8 +19,9 @@ const (
 	GCSFilterRegular FilterType = iota
 
 	// GCSFilterScripts is the script filter type: the scripts of the outputs
-	// a block creates and spends, and their token categories, served with
-	// the root of the block's entry tree in front (gcash/bchd#767).
+	// a block creates and spends, their token categories, and the IDs of the
+	// block's transactions, served with the root of the block's entry tree
+	// in front (gcash/bchd#767).
 	GCSFilterScripts
 )
 
