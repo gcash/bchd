@@ -6,17 +6,21 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
+	"github.com/gcash/bchutil/gcs/builder"
 )
 
 // scriptLeavesTestBlock returns a block whose header nonce is part of its
@@ -436,5 +440,70 @@ func TestScriptLeavesCacheErrorKeepsOther(t *testing.T) {
 	})
 	if err != nil || again != kept {
 		t.Fatalf("kept block after a failed build: entry %p, want %p, err %v", again, kept, err)
+	}
+}
+
+// TestScriptLeavesOfBlockRangeHashes checks that the hashes a kept entry
+// gives for every run of the leaves of trees of 1 to 40 leaves are the ones
+// builder.ScriptRangeHashes computes from the leaves alone, that the top of
+// the kept levels is the tree's root, and that a run the tree doesn't have
+// is refused.
+func TestScriptLeavesOfBlockRangeHashes(t *testing.T) {
+	block := scriptLeavesTestBlock(t, 21)
+	for n := 1; n <= 40; n++ {
+		leaves := make([]builder.ScriptLeaf, n)
+		for i := range leaves {
+			binary.BigEndian.PutUint32(leaves[i].Key[:4], uint32(i))
+			leaves[i].TxIndex = uint32(i % 3)
+			leaves[i].Kind = builder.ScriptLeafKind(i % 5)
+		}
+		entry := newScriptLeavesOfBlock(block, nil, leaves)
+		root := builder.ScriptLeavesRoot(leaves)
+		if n > 1 && entry.upper[len(entry.upper)-1][0] != root {
+			t.Fatalf("%d leaves: the top kept level is not the root", n)
+		}
+		for lo := 0; lo < n; lo++ {
+			for end := lo + 1; end <= n; end++ {
+				want, err := builder.ScriptRangeHashes(leaves, lo, end)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := entry.rangeHashes(lo, end)
+				if err != nil || !slices.Equal(got, want) {
+					t.Fatalf("%d leaves, run %d to %d: %v, %v; want %v", n, lo, end, got, err, want)
+				}
+			}
+		}
+		for _, bad := range [][2]int{{-1, 1}, {0, 0}, {n, n + 1}, {0, n + 1}} {
+			if _, err := entry.rangeHashes(bad[0], bad[1]); !errors.Is(err, errScriptRangeRun) {
+				t.Errorf("%d leaves, run %d to %d: %v", n, bad[0], bad[1], err)
+			}
+		}
+	}
+}
+
+// TestScriptLeavesOfBlockTxBranch checks that the Merkle branch a kept entry
+// gives for each transaction is the one built from the block's transactions,
+// and leads to the block's Merkle root.
+func TestScriptLeavesOfBlockTxBranch(t *testing.T) {
+	msg := wire.NewMsgBlock(wire.NewBlockHeader(1, &chainhash.Hash{}, &chainhash.Hash{}, 0, 31))
+	for i := 0; i < 5; i++ {
+		tx := wire.NewMsgTx(1)
+		tx.AddTxIn(wire.NewTxIn(wire.NewOutPoint(&chainhash.Hash{byte(i)}, 0), nil))
+		tx.AddTxOut(wire.NewTxOut(1, []byte{0x51}, wire.TokenData{}))
+		msg.Transactions = append(msg.Transactions, tx)
+	}
+	block := bchutil.NewBlock(msg)
+	merkles := blockchain.BuildMerkleTreeStore(block.Transactions())
+	root := *merkles[len(merkles)-1]
+	entry := newScriptLeavesOfBlock(block, nil, nil)
+	for i, tx := range block.Transactions() {
+		branch := entry.txBranch(i)
+		if !slices.Equal(branch, blockchain.MerkleBranch(merkles, i)) {
+			t.Errorf("transaction %d: branch differs from the block's", i)
+		}
+		if blockchain.MerkleBranchRoot(*tx.Hash(), uint32(i), branch) != root {
+			t.Errorf("transaction %d: branch does not lead to the Merkle root", i)
+		}
 	}
 }

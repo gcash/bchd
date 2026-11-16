@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -15,11 +16,89 @@ import (
 )
 
 // scriptLeavesOfBlock is a block with the outputs it spends and the leaves of
-// its script filter entry tree.
+// its script filter entry tree. It also keeps the nodes of that tree above
+// the leaves, about one hash for each leaf, and the block's Merkle tree, so
+// that a range or a proof answered from it reads a few hashes for each level
+// rather than hashing the whole tree or the whole block again.
 type scriptLeavesOfBlock struct {
 	block  *bchutil.Block
 	stxos  []blockchain.SpentTxOut
 	leaves []builder.ScriptLeaf
+
+	// upper holds the levels of the entry tree above the leaves, from the
+	// parents of the leaves up to the root. A node without a partner moves
+	// up unchanged, as in the tree itself.
+	upper [][]chainhash.Hash
+
+	// merkles is the block's Merkle tree, as BuildMerkleTreeStore lays it
+	// out.
+	merkles []*chainhash.Hash
+}
+
+// errScriptRangeRun is returned for a run of leaves the tree doesn't have.
+var errScriptRangeRun = errors.New("the run of leaves is not in the tree")
+
+// node returns the hash of the node at index of a level of the entry tree,
+// level 0 being the leaves.
+func (e *scriptLeavesOfBlock) node(level, index int) chainhash.Hash {
+	if level == 0 {
+		return builder.ScriptLeafHash(&e.leaves[index])
+	}
+	return e.upper[level-1][index]
+}
+
+// rangeHashes returns the hashes that, with the run leaves[lo:end], rebuild
+// the root of the entry tree, the same that builder.ScriptRangeHashes gives:
+// level by level from the leaves up, the node just left of the run's first
+// node, then the node just right of its last node, wherever the run doesn't
+// already reach it.
+func (e *scriptLeavesOfBlock) rangeHashes(lo, end int) ([]chainhash.Hash, error) {
+	if lo < 0 || lo >= end || end > len(e.leaves) {
+		return nil, errScriptRangeRun
+	}
+	var hashes []chainhash.Hash
+	a, b, width := lo, end-1, len(e.leaves)
+	for level := 0; width > 1; level++ {
+		if a%2 == 1 {
+			hashes = append(hashes, e.node(level, a-1))
+		}
+		if b%2 == 0 && b+1 < width {
+			hashes = append(hashes, e.node(level, b+1))
+		}
+		a, b, width = a/2, b/2, (width+1)/2
+	}
+	return hashes, nil
+}
+
+// txBranch returns the Merkle branch of the block's transaction at index.
+func (e *scriptLeavesOfBlock) txBranch(index int) []chainhash.Hash {
+	return blockchain.MerkleBranch(e.merkles, index)
+}
+
+// scriptTreeUpper returns the levels of the entry tree over leaves above the
+// leaves themselves, up to the root.
+func scriptTreeUpper(leaves []builder.ScriptLeaf) [][]chainhash.Hash {
+	if len(leaves) < 2 {
+		return nil
+	}
+	level := make([]chainhash.Hash, len(leaves))
+	for i := range leaves {
+		level[i] = builder.ScriptLeafHash(&leaves[i])
+	}
+	var upper [][]chainhash.Hash
+	for len(level) > 1 {
+		next := make([]chainhash.Hash, 0, (len(level)+1)/2)
+		for i := 0; i < len(level); i += 2 {
+			if i+1 == len(level) {
+				next = append(next, level[i])
+				continue
+			}
+			next = append(next, builder.ScriptNodeHash(&level[i], &level[i+1]))
+		}
+		upper = append(upper, next)
+		level = next
+	}
+	return upper
 }
 
 // scriptLeavesKept is how long the block scriptFilterLeaves last rebuilt is
@@ -119,11 +198,19 @@ func (c *scriptLeavesCache) store(entry *scriptLeavesOfBlock) {
 // newScriptLeavesOfBlock returns an entry that several goroutines may read at
 // once. Hash and Transactions fill the block's saved hash and wrapped
 // transactions, and Hash fills each transaction's saved hash, because those
-// methods write that state on first use and do not lock it.
+// methods write that state on first use and do not lock it. The levels of the
+// entry tree above the leaves and the block's Merkle tree are built here,
+// once.
 func newScriptLeavesOfBlock(block *bchutil.Block, stxos []blockchain.SpentTxOut, leaves []builder.ScriptLeaf) *scriptLeavesOfBlock {
 	block.Hash()
 	for _, tx := range block.Transactions() {
 		tx.Hash()
 	}
-	return &scriptLeavesOfBlock{block: block, stxos: stxos, leaves: leaves}
+	return &scriptLeavesOfBlock{
+		block:   block,
+		stxos:   stxos,
+		leaves:  leaves,
+		upper:   scriptTreeUpper(leaves),
+		merkles: blockchain.BuildMerkleTreeStore(block.Transactions()),
+	}
 }

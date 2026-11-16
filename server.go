@@ -1719,18 +1719,22 @@ func (s *server) filterIndexFor(filterType wire.FilterType) filterIndex {
 
 // scriptFilterLeaves rebuilds the leaves of the entry tree of a main chain
 // block's script filter, from the block and its spend journal, as the script
-// filter index did to build the root in front of the filter. The leaves are
-// not stored, since they would take about half as much space as the blocks.
-func (s *server) scriptFilterLeaves(blockHash *chainhash.Hash) (*bchutil.Block,
-	[]blockchain.SpentTxOut, []builder.ScriptLeaf, error) {
+// filter index did to build the root in front of the filter, or returns those
+// of the block last asked about. The leaves are not stored, since they would
+// take about half as much space as the blocks. built reports whether this
+// call read the block and built them, which it does even when that fails
+// partway.
+func (s *server) scriptFilterLeaves(blockHash *chainhash.Hash) (entry *scriptLeavesOfBlock,
+	built bool, err error) {
 
 	// A block can leave the main chain while its leaves are kept, so this
 	// is checked on every call, before the cache. The build itself runs
 	// inside get, which does not hold its lock across the block read.
 	if !s.chain.MainChainHasBlock(blockHash) {
-		return nil, nil, nil, fmt.Errorf("block %v is not in the main chain", blockHash)
+		return nil, false, fmt.Errorf("block %v is not in the main chain", blockHash)
 	}
-	entry, err := s.scriptLeaves.get(blockHash, func() (*scriptLeavesOfBlock, error) {
+	entry, err = s.scriptLeaves.get(blockHash, func() (*scriptLeavesOfBlock, error) {
+		built = true
 		block, err := s.chain.BlockByHash(blockHash)
 		if err != nil {
 			return nil, err
@@ -1750,18 +1754,20 @@ func (s *server) scriptFilterLeaves(blockHash *chainhash.Hash) (*bchutil.Block,
 		return newScriptLeavesOfBlock(block, stxos, leaves), nil
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, built, err
 	}
-	return entry.block, entry.stxos, entry.leaves, nil
+	return entry, built, nil
 }
 
 // cfTreeBanScore is added to the ban score of a peer for a getcfrange or a
-// getcfproof message.  Each one reads a block and its spend journal unless
-// the block is the last one asked about, and a getcfproof for a spent output
-// reads the block that created it as well, so a peer that asks without end is
-// banned.  One that settles a disagreement asks for about one proof for each
-// level of the block's entry tree, a few dozen in all, and stays far below
-// the score that warns.
+// getcfproof message that makes bchd read a block and its spend journal and
+// build the block's leaves, because the block isn't the one last asked
+// about, so a peer that makes it rebuild trees without end is banned.  A
+// request answered from the leaves kept for the last block adds nothing: it
+// reads a few hashes for each level of the tree, and a getcfproof for a spent
+// output reads that output's block too, as a getdata for one block does,
+// which adds nothing either.  A peer that settles a disagreement or fetches
+// a block's leaves by prefix asks about one block, as many times as it needs.
 const cfTreeBanScore = 1
 
 // OnGetCFRange is invoked when a peer receives a getcfrange bitcoin message.
@@ -1781,14 +1787,16 @@ func (sp *serverPeer) OnGetCFRange(_ *peer.Peer, msg *wire.MsgGetCFRange) {
 		return
 	}
 
-	// A decaying ban score increase is applied to prevent flooding.
-	sp.addBanScore(0, cfTreeBanScore, "getcfrange")
-
-	_, _, leaves, err := sp.server.scriptFilterLeaves(&msg.BlockHash)
+	entry, built, err := sp.server.scriptFilterLeaves(&msg.BlockHash)
+	if built {
+		// A decaying ban score increase is applied to prevent flooding.
+		sp.addBanScore(0, cfTreeBanScore, "getcfrange")
+	}
 	if err != nil {
 		peerLog.Debugf("Ignoring getcfrange from %s: %v", sp, err)
 		return
 	}
+	leaves := entry.leaves
 	first, end, err := builder.ScriptLeavesWithPrefix(leaves, &msg.Prefix, msg.PrefixBits)
 	if err != nil {
 		peerLog.Debugf("Ignoring getcfrange from %s: %v", sp, err)
@@ -1817,7 +1825,7 @@ func (sp *serverPeer) OnGetCFRange(_ *peer.Peer, msg *wire.MsgGetCFRange) {
 		hi++
 	}
 	if lo < hi {
-		reply.Hashes, err = builder.ScriptRangeHashes(leaves, lo, hi)
+		reply.Hashes, err = entry.rangeHashes(lo, hi)
 		if err != nil {
 			peerLog.Errorf("Error building cfrange for %v: %v", msg.BlockHash, err)
 			return
@@ -1850,21 +1858,23 @@ func (sp *serverPeer) OnGetCFProof(_ *peer.Peer, msg *wire.MsgGetCFProof) {
 		return
 	}
 
-	// A decaying ban score increase is applied to prevent flooding.
-	sp.addBanScore(0, cfTreeBanScore, "getcfproof")
-
-	block, stxos, leaves, err := sp.server.scriptFilterLeaves(&msg.BlockHash)
+	entry, built, err := sp.server.scriptFilterLeaves(&msg.BlockHash)
+	if built {
+		// A decaying ban score increase is applied to prevent flooding.
+		sp.addBanScore(0, cfTreeBanScore, "getcfproof")
+	}
 	if err != nil {
 		peerLog.Debugf("Ignoring getcfproof from %s: %v", sp, err)
 		return
 	}
+	block, stxos, leaves := entry.block, entry.stxos, entry.leaves
 	if msg.LeafIndex >= uint32(len(leaves)) {
 		peerLog.Debugf("Ignoring getcfproof from %s: leaf %d of %d",
 			sp, msg.LeafIndex, len(leaves))
 		return
 	}
 	leaf := &leaves[msg.LeafIndex]
-	leafBranch, err := builder.ScriptRangeHashes(leaves, int(msg.LeafIndex), int(msg.LeafIndex)+1)
+	leafBranch, err := entry.rangeHashes(int(msg.LeafIndex), int(msg.LeafIndex)+1)
 	if err != nil {
 		peerLog.Errorf("Error building cfproof for %v: %v", msg.BlockHash, err)
 		return
@@ -1878,7 +1888,7 @@ func (sp *serverPeer) OnGetCFProof(_ *peer.Peer, msg *wire.MsgGetCFProof) {
 		Leaf:       wire.CFLeaf(leaf.Bytes()),
 		LeafBranch: leafBranch,
 		Tx:         txs[leaf.TxIndex].MsgTx(),
-		TxBranch:   blockchain.MerkleBranch(blockchain.BuildMerkleTreeStore(txs), int(leaf.TxIndex)),
+		TxBranch:   entry.txBranch(int(leaf.TxIndex)),
 	}
 
 	if reply.Leaf.Spent() {
