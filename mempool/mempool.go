@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1454,37 +1456,111 @@ func (mp *TxPool) MiningDescs() []*mining.TxDesc {
 func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseResult {
 	descs := mp.TxDescs()
 
-	// A transaction depends on the transactions of the snapshot it spends.
+	// A transaction depends on the transactions of the snapshot it spends,
+	// and is spent by the transactions of the snapshot that spend it.
 	inPool := make(map[chainhash.Hash]struct{}, len(descs))
 	for _, desc := range descs {
 		inPool[*desc.Tx.Hash()] = struct{}{}
 	}
+	isInPool := func(hash *chainhash.Hash) bool {
+		_, ok := inPool[*hash]
+		return ok
+	}
+	spentBy := make(map[chainhash.Hash][]*TxDesc)
+	for _, desc := range descs {
+		for _, txIn := range desc.Tx.MsgTx().TxIn {
+			hash := txIn.PreviousOutPoint.Hash
+			if isInPool(&hash) {
+				spentBy[hash] = append(spentBy[hash], desc)
+			}
+		}
+	}
 
 	result := make(map[string]*btcjson.GetRawMempoolVerboseResult,
 		len(descs))
-
 	for _, desc := range descs {
-		// The priority fields are deprecated and left at 0.
-		tx := desc.Tx
-		mpd := &btcjson.GetRawMempoolVerboseResult{
-			Size:    int32(tx.MsgTx().SerializeSize()),
-			Fee:     bchutil.Amount(desc.Fee).ToBCH(),
-			Time:    desc.Added.Unix(),
-			Height:  int64(desc.Height),
-			Depends: make([]string, 0),
-		}
-		for _, txIn := range tx.MsgTx().TxIn {
-			hash := &txIn.PreviousOutPoint.Hash
-			if _, ok := inPool[*hash]; ok {
-				mpd.Depends = append(mpd.Depends,
-					hash.String())
-			}
-		}
-
-		result[tx.Hash().String()] = mpd
+		hash := desc.Tx.Hash()
+		result[hash.String()] = rawMempoolEntry(desc, isInPool,
+			spentBy[*hash])
 	}
 
 	return result
+}
+
+// MempoolEntry returns the entry of the transaction with the passed hash, as
+// RawMempoolVerbose gives it, or an error when the transaction is not in the
+// main pool.
+//
+// This function is safe for concurrent access.
+func (mp *TxPool) MempoolEntry(hash *chainhash.Hash) (*btcjson.GetRawMempoolVerboseResult, error) {
+	mp.mtx.RLock()
+	defer mp.mtx.RUnlock()
+
+	desc, exists := mp.pool[*hash]
+	if !exists {
+		return nil, fmt.Errorf("transaction is not in the pool")
+	}
+
+	// The transactions that spend it are those that spend its outputs.
+	var spentBy []*TxDesc
+	outPoint := wire.OutPoint{Hash: *hash}
+	for i := range desc.Tx.MsgTx().TxOut {
+		outPoint.Index = uint32(i)
+		if spender, ok := mp.outpoints[outPoint]; ok {
+			if child, ok := mp.pool[*spender.Hash()]; ok {
+				spentBy = append(spentBy, child)
+			}
+		}
+	}
+	isInPool := func(hash *chainhash.Hash) bool {
+		_, ok := mp.pool[*hash]
+		return ok
+	}
+
+	return rawMempoolEntry(desc, isInPool, spentBy), nil
+}
+
+// rawMempoolEntry returns the getrawmempool and getmempoolentry entry of the
+// transaction of desc.  isInPool tells which transactions are in the pool, and
+// spentBy holds those of the pool that spend its outputs, in any order and once
+// for each output they spend.  As in BCHN, each transaction it spends from the
+// pool is listed once, in the order of the txids, and each that spends it once,
+// in the order they entered the pool, with those added back from disconnected
+// blocks first.
+func rawMempoolEntry(desc *TxDesc, isInPool func(*chainhash.Hash) bool, spentBy []*TxDesc) *btcjson.GetRawMempoolVerboseResult {
+	// The priority fields are deprecated and left at 0.  bchd has no fee
+	// deltas, so the modified fee is the fee.
+	tx := desc.Tx
+	fee := bchutil.Amount(desc.Fee).ToBCH()
+	entry := &btcjson.GetRawMempoolVerboseResult{
+		Fees:    btcjson.MempoolFeesResult{Base: fee, Modified: fee},
+		Size:    int32(tx.MsgTx().SerializeSize()),
+		Fee:     fee,
+		Time:    desc.Added.Unix(),
+		Height:  int64(desc.Height),
+		Depends: make([]string, 0),
+		SpentBy: make([]string, 0, len(spentBy)),
+	}
+	for _, txIn := range tx.MsgTx().TxIn {
+		hash := &txIn.PreviousOutPoint.Hash
+		if isInPool(hash) {
+			entry.Depends = append(entry.Depends, hash.String())
+		}
+	}
+	sort.Strings(entry.Depends)
+	entry.Depends = slices.Compact(entry.Depends)
+
+	sort.Slice(spentBy, func(i, j int) bool {
+		return spentBy[i].entrySeq < spentBy[j].entrySeq
+	})
+	for i, child := range spentBy {
+		if i > 0 && child == spentBy[i-1] {
+			continue
+		}
+		entry.SpentBy = append(entry.SpentBy, child.Tx.Hash().String())
+	}
+
+	return entry
 }
 
 // LastUpdated returns the last time a transaction was added to or removed from

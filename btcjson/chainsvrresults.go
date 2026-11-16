@@ -210,23 +210,32 @@ type GetBlockTemplateResult struct {
 	RejectReasion string   `json:"reject-reason,omitempty"`
 }
 
+// MempoolFeesResult models the fees of a mempool entry, as BCHN gives them.
+type MempoolFeesResult struct {
+	Base     float64 `json:"base"`
+	Modified float64 `json:"modified"`
+}
+
 // GetMempoolEntryResult models the data returned from the getmempoolentry
-// command.
+// command, as rpcclient reads it from nodes that each give some of these
+// fields.  bchd gives a GetRawMempoolVerboseResult.
 type GetMempoolEntryResult struct {
-	Size             int32    `json:"size"`
-	Fee              float64  `json:"fee"`
-	ModifiedFee      float64  `json:"modifiedfee"`
-	Time             int64    `json:"time"`
-	Height           int64    `json:"height"`
-	StartingPriority float64  `json:"startingpriority"`
-	CurrentPriority  float64  `json:"currentpriority"`
-	DescendantCount  int64    `json:"descendantcount"`
-	DescendantSize   int64    `json:"descendantsize"`
-	DescendantFees   float64  `json:"descendantfees"`
-	AncestorCount    int64    `json:"ancestorcount"`
-	AncestorSize     int64    `json:"ancestorsize"`
-	AncestorFees     float64  `json:"ancestorfees"`
-	Depends          []string `json:"depends"`
+	Fees             MempoolFeesResult `json:"fees"`
+	Size             int32             `json:"size"`
+	Fee              float64           `json:"fee"`
+	ModifiedFee      float64           `json:"modifiedfee"`
+	Time             int64             `json:"time"`
+	Height           int64             `json:"height"`
+	StartingPriority float64           `json:"startingpriority"`
+	CurrentPriority  float64           `json:"currentpriority"`
+	DescendantCount  int64             `json:"descendantcount"`
+	DescendantSize   int64             `json:"descendantsize"`
+	DescendantFees   float64           `json:"descendantfees"`
+	AncestorCount    int64             `json:"ancestorcount"`
+	AncestorSize     int64             `json:"ancestorsize"`
+	AncestorFees     float64           `json:"ancestorfees"`
+	Depends          []string          `json:"depends"`
+	SpentBy          []string          `json:"spentby"`
 }
 
 // DSProofOutPoint models the outpoint of a double spend proof.
@@ -266,10 +275,18 @@ type GetDSProofResult struct {
 }
 
 // GetMempoolInfoResult models the data returned from the getmempoolinfo
-// command.
+// command.  The fields are those of BCHN, but for usage and maxmempool, since
+// bchd neither counts the memory its mempool uses nor limits it.  Fee rates
+// are in BCH/kB.
 type GetMempoolInfoResult struct {
-	Size  int64 `json:"size"`
-	Bytes int64 `json:"bytes"`
+	Loaded             bool    `json:"loaded"`
+	Size               int64   `json:"size"`
+	Bytes              int64   `json:"bytes"`
+	MempoolMinFee      float64 `json:"mempoolminfee"`
+	MinRelayTxFee      float64 `json:"minrelaytxfee"`
+	PermitBareMultisig bool    `json:"permitbaremultisig"`
+	MaxDataCarrierSize int64   `json:"maxdatacarriersize"`
+	TotalFee           float64 `json:"total_fee"`
 }
 
 // NetworksResult models the networks data from the getnetworkinfo command.
@@ -353,16 +370,19 @@ type GetPeerInfoResult struct {
 }
 
 // GetRawMempoolVerboseResult models the data returned from the getrawmempool
-// command when the verbose flag is set.  When the verbose flag is not set,
-// getrawmempool returns an array of transaction hashes.
+// command when the verbose flag is set, and from the getmempoolentry command.
+// When the verbose flag is not set, getrawmempool returns an array of
+// transaction hashes.  Fees and SpentBy are BCHN's, beside bchd's own fields.
 type GetRawMempoolVerboseResult struct {
-	Size             int32    `json:"size"`
-	Fee              float64  `json:"fee"`
-	Time             int64    `json:"time"`
-	Height           int64    `json:"height"`
-	StartingPriority float64  `json:"startingpriority"`
-	CurrentPriority  float64  `json:"currentpriority"`
-	Depends          []string `json:"depends"`
+	Fees             MempoolFeesResult `json:"fees"`
+	Size             int32             `json:"size"`
+	Fee              float64           `json:"fee"`
+	Time             int64             `json:"time"`
+	Height           int64             `json:"height"`
+	StartingPriority float64           `json:"startingpriority"`
+	CurrentPriority  float64           `json:"currentpriority"`
+	Depends          []string          `json:"depends"`
+	SpentBy          []string          `json:"spentby"`
 }
 
 // ScriptPubKeyResult models the scriptPubKey data of a tx script.  It is

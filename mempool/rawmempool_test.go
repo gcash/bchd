@@ -5,6 +5,7 @@
 package mempool
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -147,5 +148,97 @@ func TestRawMempoolVerboseOutsideLock(t *testing.T) {
 	if longest > call/2 {
 		t.Errorf("the mempool lock was held for %v during a call of %v",
 			longest, call)
+	}
+}
+
+// TestMempoolEntrySpentBy ensures the verbose getrawmempool entry of a
+// transaction lists each transaction of the pool spending its outputs once in
+// spentby, in the order they entered the pool, and each it spends from the
+// pool once in depends, as BCHN lists them, gives its fee as BCHN's base and
+// modified fees, and that MempoolEntry gives the same entries.
+func TestMempoolEntrySpentBy(t *testing.T) {
+	t.Parallel()
+
+	harness, _, err := newPoolHarness(&chaincfg.MainNetParams)
+	if err != nil {
+		t.Fatalf("unable to create test pool: %v", err)
+	}
+
+	// The parent has three outputs.  One child spends the first two and
+	// the other the third.
+	coin := &wire.TxOut{Value: 100000000, PkScript: harness.payScript}
+	parent := spend(t, harness, addCoins(harness, coin)[0], coin, 3, 1000,
+		txscript.SigHashAll, true)
+	outs := parent.MsgTx().TxOut
+	both := wire.NewMsgTx(1)
+	for i := range 2 {
+		both.AddTxIn(&wire.TxIn{
+			PreviousOutPoint: wire.OutPoint{Hash: *parent.Hash(), Index: uint32(i)},
+			Sequence:         wire.MaxTxInSequenceNum,
+		})
+	}
+	both.AddTxOut(&wire.TxOut{Value: outs[0].Value + outs[1].Value - 1000,
+		PkScript: harness.payScript})
+	for i := range 2 {
+		signP2PKH(t, both, i, outs[i], harness.signKey, txscript.SigHashAll,
+			true)
+	}
+	bothTx := bchutil.NewTx(both)
+	last := spend(t, harness, wire.OutPoint{Hash: *parent.Hash(), Index: 2},
+		outs[2], 1, 1000, txscript.SigHashAll, true)
+
+	// The children enter the pool in the order their txids do not sort
+	// in, so the order of spentby is not that of the txids.
+	children := []*bchutil.Tx{bothTx, last}
+	if bothTx.Hash().String() < last.Hash().String() {
+		children = []*bchutil.Tx{last, bothTx}
+	}
+	for _, tx := range append([]*bchutil.Tx{parent}, children...) {
+		if _, err := harness.txPool.ProcessTransaction(tx, false, 0); err != nil {
+			t.Fatalf("ProcessTransaction: %v", err)
+		}
+	}
+
+	result := harness.txPool.RawMempoolVerbose()
+	tests := []struct {
+		tx      *bchutil.Tx
+		depends []string
+		spentBy []string
+	}{
+		{parent, []string{}, []string{children[0].Hash().String(),
+			children[1].Hash().String()}},
+		{bothTx, []string{parent.Hash().String()}, []string{}},
+		{last, []string{parent.Hash().String()}, []string{}},
+	}
+	for _, test := range tests {
+		entry := result[test.tx.Hash().String()]
+		if entry == nil {
+			t.Fatalf("%v: no entry", test.tx.Hash())
+		}
+		if !slices.Equal(entry.Depends, test.depends) ||
+			!slices.Equal(entry.SpentBy, test.spentBy) {
+
+			t.Errorf("%v: depends %v and spentby %v, want %v and %v",
+				test.tx.Hash(), entry.Depends, entry.SpentBy,
+				test.depends, test.spentBy)
+		}
+		fee := bchutil.Amount(1000).ToBCH()
+		if entry.Fees.Base != fee || entry.Fees.Modified != fee ||
+			entry.Fee != fee {
+
+			t.Errorf("%v: fees %+v and fee %v, want %v", test.tx.Hash(),
+				entry.Fees, entry.Fee, fee)
+		}
+
+		got, err := harness.txPool.MempoolEntry(test.tx.Hash())
+		if err != nil || !reflect.DeepEqual(got, entry) {
+			t.Errorf("%v: MempoolEntry %+v, %v, want %+v",
+				test.tx.Hash(), got, err, entry)
+		}
+	}
+
+	// A transaction that is not in the main pool has no entry.
+	if _, err := harness.txPool.MempoolEntry(&chainhash.Hash{1}); err == nil {
+		t.Error("MempoolEntry found a transaction not in the pool")
 	}
 }
