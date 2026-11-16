@@ -878,7 +878,7 @@ func TestChainSvrCmds(t *testing.T) {
 				return btcjson.NewCmd("getrawtransaction", "123")
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetRawTransactionCmd("123", nil)
+				return btcjson.NewGetRawTransactionCmd("123", nil, nil, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123"],"id":1}`,
 			unmarshalled: &btcjson.GetRawTransactionCmd{
@@ -892,7 +892,7 @@ func TestChainSvrCmds(t *testing.T) {
 				return btcjson.NewCmd("getrawtransaction", "123", 1)
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetRawTransactionCmd("123", btcjson.Verboselevel(1))
+				return btcjson.NewGetRawTransactionCmd("123", btcjson.Verboselevel(1), nil, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123",1],"id":1}`,
 			unmarshalled: &btcjson.GetRawTransactionCmd{
@@ -906,12 +906,59 @@ func TestChainSvrCmds(t *testing.T) {
 				return btcjson.NewCmd("getrawtransaction", "123", true)
 			},
 			staticCmd: func() interface{} {
-				return btcjson.NewGetRawTransactionCmd("123", btcjson.Verboselevel(1))
+				return btcjson.NewGetRawTransactionCmd("123", btcjson.Verboselevel(1), nil, nil)
 			},
 			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123",1],"id":1}`,
 			unmarshalled: &btcjson.GetRawTransactionCmd{
 				Txid:    "123",
 				Verbose: btcjson.Verboselevel(1),
+			},
+		},
+		{
+			name: "getrawtransaction verbosity 2",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getrawtransaction", "123", 2)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetRawTransactionCmd("123", btcjson.Verboselevel(2), nil, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123",2],"id":1}`,
+			unmarshalled: &btcjson.GetRawTransactionCmd{
+				Txid:    "123",
+				Verbose: btcjson.Verboselevel(2),
+			},
+		},
+		{
+			name: "getrawtransaction blockhash",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getrawtransaction", "123", 2, "456")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetRawTransactionCmd("123", btcjson.Verboselevel(2),
+					btcjson.String("456"), nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123",2,"456"],"id":1}`,
+			unmarshalled: &btcjson.GetRawTransactionCmd{
+				Txid:      "123",
+				Verbose:   btcjson.Verboselevel(2),
+				BlockHash: btcjson.String("456"),
+			},
+		},
+		{
+			name: "getrawtransaction empty blockhash and patterns",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getrawtransaction", "123", false, "", false)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetRawTransactionCmd("123", btcjson.Verboselevel(0),
+					btcjson.String(""), btcjson.Bool(false))
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getrawtransaction","params":["123",0,"",false],"id":1}`,
+			unmarshalled: &btcjson.GetRawTransactionCmd{
+				Txid:      "123",
+				Verbose:   btcjson.Verboselevel(0),
+				BlockHash: btcjson.String(""),
+				Patterns:  btcjson.Bool(false),
 			},
 		},
 		{
@@ -1634,6 +1681,32 @@ func TestVerbosityLevelUnmarshal(t *testing.T) {
 		if (err != nil) != (test.want < 0) ||
 			(err == nil && level != test.want) {
 
+			t.Errorf("%s: unexpected result - got level %d, "+
+				"error %v", test.marshalled, level, err)
+		}
+	}
+}
+
+// TestVerboseLevelUnmarshal ensures the verbose level of getrawtransaction and
+// searchrawtransactions accepts a boolean or any 32-bit integer, which the
+// commands check themselves, and nothing else.
+func TestVerboseLevelUnmarshal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		marshalled string
+		want       btcjson.VerboseLevel
+		ok         bool
+	}{
+		{"false", 0, true}, {"true", 1, true}, {"0", 0, true},
+		{"1", 1, true}, {"2", 2, true}, {"3", 3, true}, {"-1", -1, true},
+		{"2.5", 0, false}, {`"1"`, 0, false}, {"4294967296", 0, false},
+		{"[]", 0, false},
+	}
+	for _, test := range tests {
+		var level btcjson.VerboseLevel
+		err := json.Unmarshal([]byte(test.marshalled), &level)
+		if (err == nil) != test.ok || (err == nil && level != test.want) {
 			t.Errorf("%s: unexpected result - got level %d, "+
 				"error %v", test.marshalled, level, err)
 		}

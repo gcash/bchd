@@ -103,7 +103,7 @@ func (c *Client) GetRawTransactionAsync(txHash *chainhash.Hash) FutureGetRawTran
 		hash = txHash.String()
 	}
 
-	cmd := btcjson.NewGetRawTransactionCmd(hash, btcjson.Verboselevel(0))
+	cmd := btcjson.NewGetRawTransactionCmd(hash, btcjson.Verboselevel(0), nil, nil)
 	return c.sendCmd(cmd)
 }
 
@@ -149,7 +149,7 @@ func (c *Client) GetRawTransactionVerboseAsync(txHash *chainhash.Hash) FutureGet
 		hash = txHash.String()
 	}
 
-	cmd := btcjson.NewGetRawTransactionCmd(hash, btcjson.Verboselevel(1))
+	cmd := btcjson.NewGetRawTransactionCmd(hash, btcjson.Verboselevel(1), nil, nil)
 	return c.sendCmd(cmd)
 }
 
