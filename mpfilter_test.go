@@ -30,7 +30,8 @@ func mpTestTx(n byte, script []byte) *wire.MsgTx {
 
 // TestMpFilters checks that each interval with transactions gets the next
 // number and a filter that matches the scripts its transactions pay and
-// spend, keyed by the hash of their IDs; that an empty interval gets neither;
+// spend and their IDs, keyed by the hash of their IDs; that an empty interval
+// gets neither;
 // that an interval closes early when it is full; and that only the latest
 // intervals are kept.
 func TestMpFilters(t *testing.T) {
@@ -70,6 +71,15 @@ func TestMpFilters(t *testing.T) {
 		if match, _ := filter.Match(key, k[:]); !match {
 			t.Errorf("script %x does not match", script)
 		}
+	}
+	for _, tx := range []*wire.MsgTx{txA, txB} {
+		k := builder.TxidKey(tx.TxHash())
+		if match, _ := filter.Match(key, k[:]); !match {
+			t.Errorf("the ID of %v does not match", tx.TxHash())
+		}
+	}
+	if filter.N() != 4 {
+		t.Errorf("filter has %d keys, want the two scripts and the two IDs", filter.N())
 	}
 	msg := iv.msg()
 	if msg.Seq != 100 || msg.TxCount != 2 || msg.IntervalHash != wantHash || msg.FilterType != wire.GCSFilterScripts {

@@ -288,7 +288,8 @@ func intervalsFor(t *testing.T, sub *mpFilterPeer, txs []*wire.MsgTx) []interval
 // checkInterval checks one pushed filter: its type, the hash of its
 // transactions in the order they were sent, its close time, the bytes the
 // script filter builder produces for those transactions, and that the filter
-// matches each script they pay or spend and not a script of 20 bytes of 0x09.
+// matches each script they pay or spend and the ID of each, and not a script
+// of 20 bytes of 0x09.
 func checkInterval(t *testing.T, h *rpctest.Harness, iv intervalTxs) {
 	t.Helper()
 	msg := iv.filter
@@ -353,6 +354,18 @@ func checkInterval(t *testing.T, h *rpctest.Harness, iv intervalTxs) {
 		if !match {
 			t.Errorf("interval %d filter misses a script it pays or spends",
 				msg.Seq)
+		}
+	}
+	for i, id := range ids {
+		txKey := builder.TxidKey(id)
+		match, err := parsed.Match(key, txKey[:])
+		if err != nil {
+			t.Errorf("interval %d: match: %v", msg.Seq, err)
+			continue
+		}
+		if !match {
+			t.Errorf("interval %d filter misses the ID of its transaction %d",
+				msg.Seq, i)
 		}
 	}
 	absent := builder.ScriptKey(bytes.Repeat([]byte{0x09}, 20))
