@@ -598,12 +598,23 @@ var helpDescsEnUS = map[string]string{
 	// GetInfoCmd help.
 	"getinfo--synopsis": "Returns a JSON object containing various state info.",
 
+	// GetMempoolEntryCmd help.
+	"getmempoolentry--synopsis": "Returns the memory pool entry of a transaction, as getrawmempool gives it when verbose is true.",
+	"getmempoolentry-txid":      "The hash of the transaction, which must be in the memory pool",
+
 	// GetMempoolInfoCmd help.
-	"getmempoolinfo--synopsis": "Returns memory pool information",
+	"getmempoolinfo--synopsis": "Returns memory pool information.\n" +
+		"BCHN's usage and maxmempool are not given, since bchd neither counts the memory its memory pool uses nor limits it.",
 
 	// GetMempoolInfoResult help.
-	"getmempoolinforesult-bytes": "Size in bytes of the mempool",
-	"getmempoolinforesult-size":  "Number of transactions in the mempool",
+	"getmempoolinforesult-loaded":             "Whether the mempool is loaded, always true since bchd does not keep the mempool on disk",
+	"getmempoolinforesult-bytes":              "Size in bytes of the mempool",
+	"getmempoolinforesult-size":               "Number of transactions in the mempool",
+	"getmempoolinforesult-mempoolminfee":      "Minimum fee rate in BCH/kB for a transaction to be accepted, the minimum relay fee rate since the mempool has no size limit",
+	"getmempoolinforesult-minrelaytxfee":      "Minimum relay fee rate in BCH/kB for transactions",
+	"getmempoolinforesult-permitbaremultisig": "Whether the mempool accepts transactions with bare multisig outputs",
+	"getmempoolinforesult-maxdatacarriersize": "Maximum total size in bytes of the data outputs of a transaction in the mempool",
+	"getmempoolinforesult-total_fee":          "Total fee of the transactions in the mempool in BCH",
 
 	// GetMiningInfoResult help.
 	"getmininginforesult-blocks":           "Height of the latest best block",
@@ -693,7 +704,13 @@ var helpDescsEnUS = map[string]string{
 	// GetPeerInfoCmd help.
 	"getpeerinfo--synopsis": "Returns data about each connected network peer as an array of json objects.",
 
+	// MempoolFeesResult help.
+	"mempoolfeesresult-base":     "Transaction fee in BCH",
+	"mempoolfeesresult-modified": "Transaction fee with fee deltas in BCH, the same as the fee since bchd has no fee deltas",
+
 	// GetRawMempoolVerboseResult help.
+	"getrawmempoolverboseresult-fees":             "The fees of the transaction as a JSON object",
+	"getrawmempoolverboseresult-spentby":          "Unconfirmed transactions spending outputs of this transaction",
 	"getrawmempoolverboseresult-size":             "Transaction size in bytes",
 	"getrawmempoolverboseresult-fee":              "Transaction fee in bitcoins",
 	"getrawmempoolverboseresult-time":             "Local time transaction entered pool in seconds since 1 Jan 1970 GMT",
@@ -996,6 +1013,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"gethashespersec":       {(*float64)(nil)},
 	"getheaders":            {(*[]string)(nil)},
 	"getinfo":               {(*btcjson.InfoChainResult)(nil)},
+	"getmempoolentry":       {(*btcjson.GetRawMempoolVerboseResult)(nil)},
 	"getmempoolinfo":        {(*btcjson.GetMempoolInfoResult)(nil)},
 	"getmininginfo":         {(*btcjson.GetMiningInfoResult)(nil)},
 	"getnettotals":          {(*btcjson.GetNetTotalsResult)(nil)},

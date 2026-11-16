@@ -176,6 +176,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"gethashespersec":       handleGetHashesPerSec,
 	"getheaders":            handleGetHeaders,
 	"getinfo":               handleGetInfo,
+	"getmempoolentry":       handleGetMempoolEntry,
 	"getmempoolinfo":        handleGetMempoolInfo,
 	"getmininginfo":         handleGetMiningInfo,
 	"getnettotals":          handleGetNetTotals,
@@ -261,10 +262,9 @@ var rpcRemoved = map[string]struct{}{
 
 // Commands that are currently unimplemented, but should ultimately be.
 var rpcUnimplemented = map[string]struct{}{
-	"getchaintips":    {},
-	"getmempoolentry": {},
-	"getwork":         {},
-	"preciousblock":   {},
+	"getchaintips":  {},
+	"getwork":       {},
+	"preciousblock": {},
 }
 
 // Commands that are available to a limited user
@@ -310,6 +310,7 @@ var rpcLimited = map[string]struct{}{
 	"getfinalizedblockhash": {},
 	"getheaders":            {},
 	"getinfo":               {},
+	"getmempoolentry":       {},
 	"getnettotals":          {},
 	"getnetworkhashps":      {},
 	"getrawmempool":         {},
@@ -3395,18 +3396,52 @@ func handleGetInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{})
 	return ret, nil
 }
 
+// handleGetMempoolEntry implements the getmempoolentry command.
+func handleGetMempoolEntry(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.GetMempoolEntryCmd)
+
+	txHash, err := chainhash.NewHashFromStr(c.TxID)
+	if err != nil {
+		return nil, rpcDecodeHexError(c.TxID)
+	}
+	entry, err := s.cfg.TxMemPool.MempoolEntry(txHash)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "Transaction not in mempool",
+		}
+	}
+
+	return entry, nil
+}
+
 // handleGetMempoolInfo implements the getmempoolinfo command.
 func handleGetMempoolInfo(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
 	mempoolTxns := s.cfg.TxMemPool.TxDescs()
 
-	var numBytes int64
+	var numBytes, totalFee int64
 	for _, txD := range mempoolTxns {
 		numBytes += int64(txD.Tx.MsgTx().SerializeSize())
+		totalFee += txD.Fee
 	}
 
+	// bchd keeps no mempool on disk, so the mempool is loaded from the
+	// start, and the mempool has no size limit, so its minimum fee rate is
+	// the minimum relay fee rate.  BCHN's usage and maxmempool are left
+	// out, since bchd neither counts the memory its mempool uses nor limits
+	// it.  Bare multisig outputs of up to three keys are standard, and the
+	// data outputs of a transaction may hold MaxDataCarrierSize bytes in
+	// all, as BCHN's defaults allow.
+	minRelayTxFee := cfg.minRelayTxFee.ToBCH()
 	ret := &btcjson.GetMempoolInfoResult{
-		Size:  int64(len(mempoolTxns)),
-		Bytes: numBytes,
+		Loaded:             true,
+		Size:               int64(len(mempoolTxns)),
+		Bytes:              numBytes,
+		MempoolMinFee:      minRelayTxFee,
+		MinRelayTxFee:      minRelayTxFee,
+		PermitBareMultisig: true,
+		MaxDataCarrierSize: txscript.MaxDataCarrierSize,
+		TotalFee:           bchutil.Amount(totalFee).ToBCH(),
 	}
 
 	return ret, nil

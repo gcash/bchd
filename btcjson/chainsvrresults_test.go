@@ -77,6 +77,33 @@ func TestChainSvrCustomResults(t *testing.T) {
 			expected: `{"txid":"123","version":0,"locktime":0,"vin":[],"vout":[],"fee":0}`,
 		},
 		{
+			name: "getrawmempool and getmempoolentry entry",
+			result: &btcjson.GetRawMempoolVerboseResult{
+				Fees:    btcjson.MempoolFeesResult{Base: 0.0001, Modified: 0.0001},
+				Size:    200,
+				Fee:     0.0001,
+				Time:    1700000000,
+				Height:  100,
+				Depends: []string{"12"},
+				SpentBy: []string{"34", "56"},
+			},
+			expected: `{"fees":{"base":0.0001,"modified":0.0001},"size":200,"fee":0.0001,"time":1700000000,"height":100,"startingpriority":0,"currentpriority":0,"depends":["12"],"spentby":["34","56"]}`,
+		},
+		{
+			name: "getmempoolinfo",
+			result: &btcjson.GetMempoolInfoResult{
+				Loaded:             true,
+				Size:               2,
+				Bytes:              400,
+				MempoolMinFee:      0.00001,
+				MinRelayTxFee:      0.00001,
+				PermitBareMultisig: true,
+				MaxDataCarrierSize: 223,
+				TotalFee:           0.0002,
+			},
+			expected: `{"loaded":true,"size":2,"bytes":400,"mempoolminfee":0.00001,"minrelaytxfee":0.00001,"permitbaremultisig":true,"maxdatacarriersize":223,"total_fee":0.0002}`,
+		},
+		{
 			name: "custom vinprevout marshal with coinbase",
 			result: &btcjson.VinPrevOut{
 				Coinbase: "021234",
