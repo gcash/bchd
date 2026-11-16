@@ -550,6 +550,18 @@ func TestHelpArgInternals(t *testing.T) {
 				" \"f\": n, (json-type-numeric) s2-f\n" +
 				"},...]\n",
 		},
+		{
+			name:   "command with a block hash or height",
+			method: "test",
+			reflectType: func() reflect.Type {
+				type s struct {
+					HashOrHeight btcjson.HashOrHeight
+				}
+				return reflect.TypeFor[*s]()
+			}(),
+			defaults: nil,
+			help:     "1. hashorheight (json-type-string-or-numeric, help-required) test-hashorheight\n",
+		},
 	}
 
 	xT := func(key string) string {

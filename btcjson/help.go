@@ -33,6 +33,9 @@ var baseHelpDescs = map[string]string{
 	"json-type-object":  "object",
 	"json-type-value":   "value",
 
+	// The JSON type of a block hash or height.
+	"json-type-string-or-numeric": "string or numeric",
+
 	// JSON examples.
 	"json-example-string":   "value",
 	"json-example-bool":     "true|false",
@@ -44,9 +47,17 @@ var baseHelpDescs = map[string]string{
 // a key.
 type descLookupFunc func(string) string
 
+// hashOrHeightType is the type of a block hash or height, which is a JSON
+// string or number rather than the object its kind would make it.
+var hashOrHeightType = reflect.TypeFor[HashOrHeight]()
+
 // reflectTypeToJSONType returns a string that represents the JSON type
 // associated with the provided Go type.
 func reflectTypeToJSONType(xT descLookupFunc, rt reflect.Type) string {
+	if rt == hashOrHeightType {
+		return xT("json-type-string-or-numeric")
+	}
+
 	kind := rt.Kind()
 	if isNumeric(kind) {
 		return xT("json-type-numeric")
@@ -357,6 +368,9 @@ func argHelp(xT descLookupFunc, rtp reflect.Type, defaults map[int]reflect.Value
 			fieldType = fieldType.Elem()
 		}
 		kind := fieldType.Kind()
+		if fieldType == hashOrHeightType {
+			continue
+		}
 		switch kind {
 		case reflect.Struct:
 			fieldDescKey := fmt.Sprintf("%s-%s", method, fieldName)

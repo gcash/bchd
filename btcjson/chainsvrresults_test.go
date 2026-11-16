@@ -149,6 +149,44 @@ func TestChainSvrCustomResults(t *testing.T) {
 			result:   &btcjson.ValidateAddressChainResult{},
 			expected: `{"isvalid":false}`,
 		},
+		{
+			name: "getblockstats",
+			result: &btcjson.GetBlockStatsResult{
+				AvgFee:             0.00002,
+				AvgFeeRate:         0.0000002,
+				AvgTxSize:          98,
+				BlockHash:          "123",
+				FeeRatePercentiles: []float64{0.0000001, 0.0000001, 0.00000029, 0.00000029, 0.00000029},
+				Height:             103,
+				Ins:                3,
+				MaxFee:             0.00003,
+				MaxFeeRate:         0.00000029,
+				MaxTxSize:          102,
+				MedianFee:          0.00002,
+				MedianTime:         1700000000,
+				MedianTxSize:       98,
+				MinFee:             0.00001,
+				MinFeeRate:         0.0000001,
+				MinTxSize:          95,
+				Outs:               4,
+				Subsidy:            50,
+				Time:               1700000600,
+				TotalOut:           149.99996,
+				TotalSize:          197,
+				TotalFee:           0.00004,
+				Txs:                3,
+				UTXOIncrease:       1,
+				UTXOSizeIncrease:   75,
+			},
+			expected: `{"avgfee":0.00002,"avgfeerate":2e-7,"avgtxsize":98,` +
+				`"blockhash":"123","feerate_percentiles":[1e-7,1e-7,2.9e-7,2.9e-7,2.9e-7],` +
+				`"height":103,"ins":3,"maxfee":0.00003,"maxfeerate":2.9e-7,` +
+				`"maxtxsize":102,"medianfee":0.00002,"mediantime":1700000000,` +
+				`"mediantxsize":98,"minfee":0.00001,"minfeerate":1e-7,` +
+				`"mintxsize":95,"outs":4,"subsidy":50,"time":1700000600,` +
+				`"total_out":149.99996,"total_size":197,"totalfee":0.00004,` +
+				`"txs":3,"utxo_increase":1,"utxo_size_inc":75}`,
+		},
 	}
 
 	t.Logf("Running %d tests", len(tests))

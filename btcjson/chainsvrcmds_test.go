@@ -486,6 +486,37 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 		},
 		{
+			name: "getblockstats height",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getblockstats", "1000")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBlockStatsCmd(
+					btcjson.HashOrHeight{Value: 1000}, nil)
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getblockstats","params":[1000],"id":1}`,
+			unmarshalled: &btcjson.GetBlockStatsCmd{
+				HashOrHeight: btcjson.HashOrHeight{Value: 1000},
+			},
+		},
+		{
+			name: "getblockstats hash and stats",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("getblockstats", `"123"`,
+					`["minfeerate","avgfeerate"]`)
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewGetBlockStatsCmd(
+					btcjson.HashOrHeight{Value: "123"},
+					&[]string{"minfeerate", "avgfeerate"})
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"getblockstats","params":["123",["minfeerate","avgfeerate"]],"id":1}`,
+			unmarshalled: &btcjson.GetBlockStatsCmd{
+				HashOrHeight: btcjson.HashOrHeight{Value: "123"},
+				Stats:        &[]string{"minfeerate", "avgfeerate"},
+			},
+		},
+		{
 			name: "getblocktemplate",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("getblocktemplate")
@@ -1636,6 +1667,34 @@ func TestVerbosityLevelUnmarshal(t *testing.T) {
 
 			t.Errorf("%s: unexpected result - got level %d, "+
 				"error %v", test.marshalled, level, err)
+		}
+	}
+}
+
+// TestHashOrHeightUnmarshal ensures a getblockstats hash or height takes a
+// string as a hash and an integer as a height, kept negative for the command
+// to refuse as Bitcoin Cash Node does, and rejects anything else.
+func TestHashOrHeightUnmarshal(t *testing.T) {
+	t.Parallel()
+
+	// A nil value means the value must be rejected.
+	tests := []struct {
+		marshalled string
+		want       interface{}
+	}{
+		{"0", 0}, {"1000", 1000}, {"-1", -1}, {`"1000"`, "1000"},
+		{`"00ff"`, "00ff"}, {"2147483647", 2147483647},
+		{"2147483648", nil}, {"2.5", nil}, {"1e3", nil}, {"true", nil},
+		{"null", nil}, {"[1]", nil}, {`{"height":1}`, nil},
+	}
+	for _, test := range tests {
+		var hashOrHeight btcjson.HashOrHeight
+		err := json.Unmarshal([]byte(test.marshalled), &hashOrHeight)
+		if (err != nil) != (test.want == nil) ||
+			(err == nil && hashOrHeight.Value != test.want) {
+
+			t.Errorf("%s: unexpected result - got %#v, error %v",
+				test.marshalled, hashOrHeight.Value, err)
 		}
 	}
 }

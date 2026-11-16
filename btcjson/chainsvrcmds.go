@@ -437,6 +437,61 @@ func NewGetBlockHeaderCmd(hash string, verbose *bool) *GetBlockHeaderCmd {
 	}
 }
 
+// HashOrHeight is a block hash, which is a JSON string, or a block height,
+// which is a JSON number, as the getblockstats command takes.  Value holds a
+// string or an int.
+type HashOrHeight struct {
+	Value interface{}
+}
+
+// MarshalJSON marshals the hash or height as a JSON string or number.
+func (h HashOrHeight) MarshalJSON() ([]byte, error) {
+	return json.Marshal(h.Value)
+}
+
+// UnmarshalJSON unmarshals a JSON string as a hash and a JSON number, which
+// must be an integer, as a height.
+func (h *HashOrHeight) UnmarshalJSON(data []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var value interface{}
+	if err := dec.Decode(&value); err != nil {
+		return err
+	}
+	switch value := value.(type) {
+	case string:
+		h.Value = value
+	case json.Number:
+		height, err := strconv.ParseInt(value.String(), 10, 32)
+		if err != nil {
+			return fmt.Errorf("invalid block height %s", value)
+		}
+		h.Value = int(height)
+	default:
+		return errors.New("expected a block hash or height")
+	}
+	return nil
+}
+
+// GetBlockStatsCmd defines the getblockstats JSON-RPC command.
+type GetBlockStatsCmd struct {
+	HashOrHeight HashOrHeight `jsonrpcusage:"hash_or_height"`
+	Stats        *[]string
+}
+
+// NewGetBlockStatsCmd returns a new instance which can be used to issue a
+// getblockstats JSON-RPC command.  The hash or height holds a block hash as a
+// string or a block height as an int.
+//
+// The parameters which are pointers indicate they are optional.  Passing nil
+// for optional parameters will use the default value.
+func NewGetBlockStatsCmd(hashOrHeight HashOrHeight, stats *[]string) *GetBlockStatsCmd {
+	return &GetBlockStatsCmd{
+		HashOrHeight: hashOrHeight,
+		Stats:        stats,
+	}
+}
+
 // TemplateRequest is a request object as defined in BIP22
 // (https://en.bitcoin.it/wiki/BIP_0022), it is optionally provided as an
 // pointer argument to GetBlockTemplateCmd.
@@ -1197,6 +1252,7 @@ func init() {
 	MustRegisterCmd("getblockcount", (*GetBlockCountCmd)(nil), flags)
 	MustRegisterCmd("getblockhash", (*GetBlockHashCmd)(nil), flags)
 	MustRegisterCmd("getblockheader", (*GetBlockHeaderCmd)(nil), flags)
+	MustRegisterCmd("getblockstats", (*GetBlockStatsCmd)(nil), flags)
 	MustRegisterCmd("getblocktemplate", (*GetBlockTemplateCmd)(nil), flags)
 	MustRegisterCmd("getcfilter", (*GetCFilterCmd)(nil), flags)
 	MustRegisterCmd("getcfilterheader", (*GetCFilterHeaderCmd)(nil), flags)
