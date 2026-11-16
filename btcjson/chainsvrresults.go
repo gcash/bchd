@@ -487,13 +487,20 @@ type GetBlockPrevOutResult struct {
 // Vin models parts of the tx data.  It is defined separately since
 // getrawtransaction, decoderawtransaction, and searchrawtransaction use the
 // same structure.
+//
+// The output an input spends is given under PrevOut by getblock at verbosity
+// 3, and by getrawtransaction at verbosity 2 as Value, ScriptPubKey and
+// TokenData in the input itself, as BCHN gives them.
 type Vin struct {
-	Coinbase  string                 `json:"coinbase"`
-	Txid      string                 `json:"txid"`
-	Vout      uint32                 `json:"vout"`
-	ScriptSig *ScriptSig             `json:"scriptSig"`
-	PrevOut   *GetBlockPrevOutResult `json:"prevout,omitempty"`
-	Sequence  uint32                 `json:"sequence"`
+	Coinbase     string                     `json:"coinbase"`
+	Txid         string                     `json:"txid"`
+	Vout         uint32                     `json:"vout"`
+	ScriptSig    *ScriptSig                 `json:"scriptSig"`
+	PrevOut      *GetBlockPrevOutResult     `json:"prevout,omitempty"`
+	Value        *float64                   `json:"value,omitempty"`
+	ScriptPubKey *PrevOutScriptPubKeyResult `json:"scriptPubKey,omitempty"`
+	TokenData    *TokenDataResult           `json:"tokenData,omitempty"`
+	Sequence     uint32                     `json:"sequence"`
 }
 
 // IsCoinBase returns a bool to show if a Vin is a Coinbase one or not.
@@ -515,17 +522,23 @@ func (v *Vin) MarshalJSON() ([]byte, error) {
 	}
 
 	txStruct := struct {
-		Txid      string                 `json:"txid"`
-		Vout      uint32                 `json:"vout"`
-		ScriptSig *ScriptSig             `json:"scriptSig"`
-		PrevOut   *GetBlockPrevOutResult `json:"prevout,omitempty"`
-		Sequence  uint32                 `json:"sequence"`
+		Txid         string                     `json:"txid"`
+		Vout         uint32                     `json:"vout"`
+		ScriptSig    *ScriptSig                 `json:"scriptSig"`
+		PrevOut      *GetBlockPrevOutResult     `json:"prevout,omitempty"`
+		Value        *float64                   `json:"value,omitempty"`
+		ScriptPubKey *PrevOutScriptPubKeyResult `json:"scriptPubKey,omitempty"`
+		TokenData    *TokenDataResult           `json:"tokenData,omitempty"`
+		Sequence     uint32                     `json:"sequence"`
 	}{
-		Txid:      v.Txid,
-		Vout:      v.Vout,
-		ScriptSig: v.ScriptSig,
-		PrevOut:   v.PrevOut,
-		Sequence:  v.Sequence,
+		Txid:         v.Txid,
+		Vout:         v.Vout,
+		ScriptSig:    v.ScriptSig,
+		PrevOut:      v.PrevOut,
+		Value:        v.Value,
+		ScriptPubKey: v.ScriptPubKey,
+		TokenData:    v.TokenData,
+		Sequence:     v.Sequence,
 	}
 	return json.Marshal(txStruct)
 }
@@ -642,6 +655,7 @@ type TxRawResult struct {
 	Confirmations uint64   `json:"confirmations,omitempty"`
 	Time          int64    `json:"time,omitempty"`
 	Blocktime     int64    `json:"blocktime,omitempty"`
+	InActiveChain *bool    `json:"in_active_chain,omitempty"`
 }
 
 // SearchRawTransactionsResult models the data from the searchrawtransaction

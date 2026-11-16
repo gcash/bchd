@@ -361,14 +361,20 @@ func (v *VerbosityLevel) UnmarshalJSON(dat []byte) error {
 type VerboseLevel int
 
 // UnmarshalJSON allows the VerbosityLevel to unmarshal either bool or int.
+// Any integer is accepted, as in BCHN, so that each command can refuse the
+// levels it does not take with its own error.
 func (v *VerboseLevel) UnmarshalJSON(dat []byte) error {
 	switch string(dat) {
-	case "0", "false":
+	case "false":
 		*v = 0
-	case "1", "true":
+	case "true":
 		*v = 1
 	default:
-		return errors.New("invalid VerboseLevel value")
+		level, err := strconv.ParseInt(string(dat), 10, 32)
+		if err != nil {
+			return errors.New("invalid VerboseLevel value")
+		}
+		*v = VerboseLevel(level)
 	}
 	return nil
 }
@@ -845,11 +851,16 @@ func NewGetRawMempoolCmd(verbose *bool) *GetRawMempoolCmd {
 
 // GetRawTransactionCmd defines the getrawtransaction JSON-RPC command.
 //
-// NOTE: This field is an int versus a bool to remain compatible with Bitcoin
-// Core even though it really should be a bool.
+// Verbose is the verbosity level of BCHN: 0 or false for the serialized
+// transaction, 1 or true for a JSON object, and 2 for the JSON object with the
+// outputs its inputs spend and its fee.  BlockHash, when not empty, is the only
+// block the transaction is looked for in.  Patterns asks for BCHN's byte code
+// patterns, which are not supported, so only false is accepted.
 type GetRawTransactionCmd struct {
-	Txid    string
-	Verbose *VerboseLevel `jsonrpcdefault:"0"`
+	Txid      string
+	Verbose   *VerboseLevel `jsonrpcdefault:"0"`
+	BlockHash *string
+	Patterns  *bool
 }
 
 // NewGetRawTransactionCmd returns a new instance which can be used to issue a
@@ -857,10 +868,12 @@ type GetRawTransactionCmd struct {
 //
 // The parameters which are pointers indicate they are optional.  Passing nil
 // for optional parameters will use the default value.
-func NewGetRawTransactionCmd(txHash string, verbose *VerboseLevel) *GetRawTransactionCmd {
+func NewGetRawTransactionCmd(txHash string, verbose *VerboseLevel, blockHash *string, patterns *bool) *GetRawTransactionCmd {
 	return &GetRawTransactionCmd{
-		Txid:    txHash,
-		Verbose: verbose,
+		Txid:      txHash,
+		Verbose:   verbose,
+		BlockHash: blockHash,
+		Patterns:  patterns,
 	}
 }
 

@@ -2253,31 +2253,68 @@ func addBlockPrevOuts(chainParams *chaincfg.Params,
 			len(stxos), numInputs)
 	}
 
+	form := prevOutsOmitted
+	if prevOuts {
+		form = prevOutsNested
+	}
 	var stxoIdx int
 	for i, tx := range txns[1:] {
-		msgTx := tx.MsgTx()
-		rawTxn := &rawTxns[i+1]
-		var totalIn int64
-		for j := range msgTx.TxIn {
-			stxo := &stxos[stxoIdx]
-			stxoIdx++
-
-			if prevOuts {
-				rawTxn.Vin[j].PrevOut = createPrevOutResult(
-					chainParams, stxo)
-			}
-			totalIn += stxo.Amount
-		}
-
-		var totalOut int64
-		for _, txOut := range msgTx.TxOut {
-			totalOut += txOut.Value
-		}
-		fee := bchutil.Amount(totalIn - totalOut).ToBCH()
-		rawTxn.Fee = &fee
+		numTxIns := len(tx.MsgTx().TxIn)
+		addTxPrevOuts(chainParams, &rawTxns[i+1], tx.MsgTx(),
+			stxos[stxoIdx:stxoIdx+numTxIns], form)
+		stxoIdx += numTxIns
 	}
 
 	return nil
+}
+
+// prevOutsForm is how the raw transaction result of a transaction gives the
+// outputs its inputs spend.
+type prevOutsForm int
+
+const (
+	// prevOutsOmitted gives none of them, as getblock does at verbosity 2.
+	prevOutsOmitted prevOutsForm = iota
+
+	// prevOutsNested gives each under the prevout of its input, with the
+	// height of its block and whether a coinbase created it, as getblock
+	// does at verbosity 3.
+	prevOutsNested
+
+	// prevOutsInline gives the value, script and token data of each in its
+	// input itself, as BCHN's getrawtransaction does at verbosity 2.
+	prevOutsInline
+)
+
+// addTxPrevOuts adds the fee of a transaction to its raw transaction result,
+// from stxos, the outputs its inputs spend in the order of its inputs, and
+// those outputs too in the given form.
+func addTxPrevOuts(chainParams *chaincfg.Params, rawTxn *btcjson.TxRawResult,
+	msgTx *wire.MsgTx, stxos []blockchain.SpentTxOut, form prevOutsForm) {
+
+	var totalIn int64
+	for j := range msgTx.TxIn {
+		stxo := &stxos[j]
+		switch form {
+		case prevOutsNested:
+			rawTxn.Vin[j].PrevOut = createPrevOutResult(chainParams,
+				stxo)
+		case prevOutsInline:
+			prevOut := createPrevOutResult(chainParams, stxo)
+			vin := &rawTxn.Vin[j]
+			vin.Value = &prevOut.Value
+			vin.ScriptPubKey = &prevOut.ScriptPubKey
+			vin.TokenData = prevOut.TokenData
+		}
+		totalIn += stxo.Amount
+	}
+
+	var totalOut int64
+	for _, txOut := range msgTx.TxOut {
+		totalOut += txOut.Value
+	}
+	fee := bchutil.Amount(totalIn - totalOut).ToBCH()
+	rawTxn.Fee = &fee
 }
 
 // softForkStatus converts a ThresholdState state into a human readable string
@@ -3705,9 +3742,65 @@ func handleGetRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan
 		return nil, rpcDecodeHexError(c.Txid)
 	}
 
-	verbose := false
+	// The coinbase of the genesis block cannot be spent, so BCHN refuses it
+	// even when the genesis block is given.
+	if *txHash == s.cfg.ChainParams.GenesisBlock.Header.MerkleRoot {
+		return nil, &btcjson.RPCError{
+			Code: btcjson.ErrRPCInvalidAddressOrKey,
+			Message: "The genesis block coinbase is not considered an " +
+				"ordinary transaction and cannot be retrieved",
+		}
+	}
+
+	// As in BCHN, verbosity 1 gives the transaction as a JSON object, and
+	// verbosity 2 adds the outputs its inputs spend and its fee.
+	var verbosity btcjson.VerboseLevel
 	if c.Verbose != nil {
-		verbose = *c.Verbose != 0
+		verbosity = *c.Verbose
+	}
+	if verbosity < 0 || verbosity > 2 {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInvalidAddressOrKey,
+			Message: fmt.Sprintf("Wrong verbosity level %d", verbosity),
+		}
+	}
+	verbose := verbosity != 0
+
+	// BCHN's patterns add the byte code patterns of the scripts, which bchd
+	// does not make, so they are refused rather than left out.
+	if c.Patterns != nil && *c.Patterns {
+		return nil, rpcInvalidError("Byte code patterns are not supported")
+	}
+
+	// With a block hash, only that block is searched, as in BCHN, so the
+	// transaction index is not needed.
+	if c.BlockHash != nil && *c.BlockHash != "" {
+		blkHash, err := chainhash.NewHashFromStr(*c.BlockHash)
+		if err != nil {
+			return nil, rpcDecodeHexError(*c.BlockHash)
+		}
+		if _, err := s.cfg.Chain.HeaderByHash(blkHash); err != nil {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCInvalidAddressOrKey,
+				Message: "Block hash not found",
+			}
+		}
+		blk, txIdx, err := fetchBlockTx(s, blkHash, txHash)
+		if err != nil {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCMisc,
+				Message: "Block not available",
+			}
+		}
+		if txIdx < 0 {
+			return nil, &btcjson.RPCError{
+				Code: btcjson.ErrRPCInvalidAddressOrKey,
+				Message: "No such transaction found in the provided " +
+					"block. Use gettransaction for wallet " +
+					"transactions.",
+			}
+		}
+		return blockTxRawResult(s, blk, txIdx, verbosity, true)
 	}
 
 	// Try to fetch the transaction from the memory pool and if that fails,
@@ -3734,6 +3827,17 @@ func handleGetRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan
 		}
 		if blockRegion == nil {
 			return nil, rpcNoTxInfoError(txHash)
+		}
+
+		// At verbosity 2 the outputs the inputs spend come from the
+		// spend journal of the transaction's block, which is read with
+		// the whole block.
+		if verbosity == 2 {
+			blk, txIdx, err := fetchBlockTx(s, blockRegion.Hash, txHash)
+			if err != nil || txIdx < 0 {
+				return nil, rpcNoTxInfoError(txHash)
+			}
+			return blockTxRawResult(s, blk, txIdx, verbosity, false)
 		}
 
 		// Load the raw transaction bytes from the database.
@@ -3811,7 +3915,140 @@ func handleGetRawTransaction(s *rpcServer, cmd interface{}, closeNotifier <-chan
 	if err != nil {
 		return nil, err
 	}
+
+	// At verbosity 2 the outputs the inputs of a mempool transaction spend
+	// come from the UTXO set and the mempool.
+	if verbosity == 2 && tx != nil {
+		if stxos := mempoolTxSpentOutputs(s.cfg.TxMemPool, tx); stxos != nil {
+			addTxPrevOuts(s.cfg.ChainParams, rawTxn, mtx, stxos,
+				prevOutsInline)
+		}
+	}
 	return *rawTxn, nil
+}
+
+// fetchBlockTx returns the stored block with the passed hash, whether it is in
+// the main chain or not, and the index in it of the transaction with the passed
+// hash, or -1 when the block does not hold that transaction.
+func fetchBlockTx(s *rpcServer, blkHash, txHash *chainhash.Hash) (*bchutil.Block, int, error) {
+	var blkBytes []byte
+	err := s.cfg.DB.View(func(dbTx database.Tx) error {
+		var err error
+		blkBytes, err = dbTx.FetchBlock(blkHash)
+		return err
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	blk, err := bchutil.NewBlockFromBytes(blkBytes)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i, tx := range blk.Transactions() {
+		if tx.Hash().IsEqual(txHash) {
+			return blk, i, nil
+		}
+	}
+	return blk, -1, nil
+}
+
+// blockTxRawResult returns the getrawtransaction result for the transaction at
+// index txIdx of the passed block.  As in BCHN, the confirmations and times are
+// given only for a block in the main chain, and with blockGiven, when the block
+// was given with the command, whether it is in the main chain.  At verbosity 2
+// the outputs the inputs spend and the fee come from the spend journal of the
+// block, and are left out when the block has none, as a block off the main
+// chain has none.
+func blockTxRawResult(s *rpcServer, blk *bchutil.Block, txIdx int,
+	verbosity btcjson.VerboseLevel, blockGiven bool) (interface{}, error) {
+
+	txns := blk.Transactions()
+	mtx := txns[txIdx].MsgTx()
+	if verbosity == 0 {
+		mtxHex, err := messageToHex(mtx)
+		if err != nil {
+			return nil, err
+		}
+		return mtxHex, nil
+	}
+
+	blkHash := blk.Hash()
+	var blkHeader *wire.BlockHeader
+	blkHeight, err := s.cfg.Chain.BlockHeightByHash(blkHash)
+	inActiveChain := err == nil
+	if inActiveChain {
+		blkHeader = &blk.MsgBlock().Header
+	}
+	rawTxn, err := createTxRawResult(s.cfg.ChainParams, mtx,
+		txns[txIdx].Hash().String(), blkHeader, blkHash.String(),
+		blkHeight, s.cfg.Chain.BestSnapshot().Height)
+	if err != nil {
+		return nil, err
+	}
+	rawTxn.BlockHash = blkHash.String()
+	if blockGiven {
+		rawTxn.InActiveChain = &inActiveChain
+	}
+
+	if verbosity == 2 && txIdx > 0 {
+		// The journal holds the spent outputs of every input of the
+		// block but the coinbase, in order.
+		var first, numInputs int
+		for i, tx := range txns[1:] {
+			if i+1 == txIdx {
+				first = numInputs
+			}
+			numInputs += len(tx.MsgTx().TxIn)
+		}
+		stxos, err := s.cfg.Chain.FetchSpendJournal(blk)
+		if err == nil && len(stxos) != numInputs {
+			err = fmt.Errorf("got %d spent outputs for %d inputs",
+				len(stxos), numInputs)
+		}
+		if err != nil {
+			rpcsLog.Debugf("Omitting spent outputs and fee of "+
+				"transaction %v: %v", txns[txIdx].Hash(), err)
+		} else {
+			addTxPrevOuts(s.cfg.ChainParams, rawTxn, mtx,
+				stxos[first:first+len(mtx.TxIn)], prevOutsInline)
+		}
+	}
+
+	return *rawTxn, nil
+}
+
+// mempoolTxSpentOutputs returns the outputs the inputs of the passed mempool
+// transaction spend, from the UTXO set and the mempool, in the form the spend
+// journal holds them, or nil when one is not found, as when the transaction
+// was mined meanwhile.
+func mempoolTxSpentOutputs(mp *mempool.TxPool, tx *bchutil.Tx) []blockchain.SpentTxOut {
+	view, err := mp.FetchInputUtxos(tx)
+	if err != nil {
+		return nil
+	}
+	txIns := tx.MsgTx().TxIn
+	stxos := make([]blockchain.SpentTxOut, len(txIns))
+	for i, txIn := range txIns {
+		entry := view.LookupEntry(txIn.PreviousOutPoint)
+		if entry == nil || entry.IsSpent() {
+			return nil
+		}
+
+		// The spend journal stores token data in front of the script.
+		pkScript := entry.PkScript()
+		if tokenData := entry.TokenData(); !tokenData.IsEmpty() {
+			buf := tokenData.TokenDataBuffer()
+			buf.Write(pkScript)
+			pkScript = buf.Bytes()
+		}
+		stxos[i] = blockchain.SpentTxOut{
+			Amount:     entry.Amount(),
+			PkScript:   pkScript,
+			Height:     entry.BlockHeight(),
+			IsCoinBase: entry.IsCoinBase(),
+		}
+	}
+	return stxos
 }
 
 // handleGetTxOut handles gettxout commands.
@@ -4508,9 +4745,15 @@ func handleSearchRawTransactions(s *rpcServer, cmd interface{}, closeNotifier <-
 		}
 	}
 
+	// Only false or 0 and true or 1 are verbose levels here, which the type
+	// leaves to the command since getrawtransaction also takes 2.
+	c := cmd.(*btcjson.SearchRawTransactionsCmd)
+	if c.Verbose != nil && (*c.Verbose < 0 || *c.Verbose > 1) {
+		return nil, rpcInvalidError("Invalid verbose level %d", *c.Verbose)
+	}
+
 	// Override the flag for including extra previous output information in
 	// each input if needed.
-	c := cmd.(*btcjson.SearchRawTransactionsCmd)
 	vinExtra := false
 	if c.VinExtra != nil {
 		vinExtra = *c.VinExtra != 0

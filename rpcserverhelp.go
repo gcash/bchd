@@ -115,13 +115,16 @@ var helpDescsEnUS = map[string]string{
 	"vinprevout-sequence":    "The script sequence number",
 
 	// Vin help.
-	"vin-coinbase":    "The hex-encoded bytes of the signature script (coinbase txns only)",
-	"vin-txid":        "The hash of the origin transaction (non-coinbase txns only)",
-	"vin-vout":        "The index of the output being redeemed from the origin transaction (non-coinbase txns only)",
-	"vin-scriptSig":   "The signature script used to redeem the origin transaction as a JSON object (non-coinbase txns only)",
-	"vin-txinwitness": "The witness used to redeem the input encoded as a string array of its items",
-	"vin-prevout":     "The output spent by this input as a JSON object (non-coinbase txns only, only when getblock verbosity>=3)",
-	"vin-sequence":    "The script sequence number",
+	"vin-coinbase":     "The hex-encoded bytes of the signature script (coinbase txns only)",
+	"vin-txid":         "The hash of the origin transaction (non-coinbase txns only)",
+	"vin-vout":         "The index of the output being redeemed from the origin transaction (non-coinbase txns only)",
+	"vin-scriptSig":    "The signature script used to redeem the origin transaction as a JSON object (non-coinbase txns only)",
+	"vin-txinwitness":  "The witness used to redeem the input encoded as a string array of its items",
+	"vin-prevout":      "The output spent by this input as a JSON object (non-coinbase txns only, only when getblock verbosity>=3)",
+	"vin-value":        "The value in BCH of the output spent by this input (non-coinbase txns only, only when getrawtransaction verbosity=2)",
+	"vin-scriptPubKey": "The public key script of the output spent by this input as a JSON object (non-coinbase txns only, only when getrawtransaction verbosity=2)",
+	"vin-tokenData":    "The CashTokens data of the output spent by this input as a JSON object (only when getrawtransaction verbosity=2 and the output carries a token)",
+	"vin-sequence":     "The script sequence number",
 
 	// GetBlockPrevOutResult help.
 	"getblockprevoutresult-generated":    "Whether the spent output was created by a coinbase transaction",
@@ -320,20 +323,21 @@ var helpDescsEnUS = map[string]string{
 	"-status":                     "A bool which indicates if the soft fork is active",
 
 	// TxRawResult help.
-	"txrawresult-hex":           "Hex-encoded transaction",
-	"txrawresult-txid":          "The hash of the transaction",
-	"txrawresult-version":       "The transaction version",
-	"txrawresult-locktime":      "The transaction lock time",
-	"txrawresult-vin":           "The transaction inputs as JSON objects",
-	"txrawresult-vout":          "The transaction outputs as JSON objects",
-	"txrawresult-fee":           "The transaction fee in BCH (non-coinbase txns only, only when getblock verbosity>=2)",
-	"txrawresult-blockhash":     "Hash of the block the transaction is part of",
-	"txrawresult-confirmations": "Number of confirmations of the block",
-	"txrawresult-time":          "Transaction time in seconds since 1 Jan 1970 GMT",
-	"txrawresult-blocktime":     "Block time in seconds since the 1 Jan 1970 GMT",
-	"txrawresult-size":          "The size of the transaction in bytes",
-	"txrawresult-vsize":         "The virtual size of the transaction in bytes",
-	"txrawresult-hash":          "The wtxid of the transaction",
+	"txrawresult-hex":             "Hex-encoded transaction",
+	"txrawresult-txid":            "The hash of the transaction",
+	"txrawresult-version":         "The transaction version",
+	"txrawresult-locktime":        "The transaction lock time",
+	"txrawresult-vin":             "The transaction inputs as JSON objects",
+	"txrawresult-vout":            "The transaction outputs as JSON objects",
+	"txrawresult-fee":             "The transaction fee in BCH (non-coinbase txns only, only when getblock verbosity>=2 or getrawtransaction verbosity=2)",
+	"txrawresult-blockhash":       "Hash of the block the transaction is part of",
+	"txrawresult-confirmations":   "Number of confirmations of the block",
+	"txrawresult-time":            "Transaction time in seconds since 1 Jan 1970 GMT",
+	"txrawresult-blocktime":       "Block time in seconds since the 1 Jan 1970 GMT",
+	"txrawresult-size":            "The size of the transaction in bytes",
+	"txrawresult-vsize":           "The virtual size of the transaction in bytes",
+	"txrawresult-hash":            "The wtxid of the transaction",
+	"txrawresult-in_active_chain": "Whether the block is in the main chain (only when getrawtransaction is given a block hash)",
 
 	// SearchRawTransactionsResult help.
 	"searchrawtransactionsresult-hex":           "Hex-encoded transaction",
@@ -711,11 +715,15 @@ var helpDescsEnUS = map[string]string{
 	"getrawmempool--result0":    "Array of transaction hashes",
 
 	// GetRawTransactionCmd help.
-	"getrawtransaction--synopsis":   "Returns information about a transaction given its hash.",
+	"getrawtransaction--synopsis": "Returns information about a transaction given its hash.\n" +
+		"Without a block hash the transaction is looked for in the memory pool and then, with --txindex, in the block chain.\n" +
+		"With a block hash only that block is searched, so the transaction index is not needed.",
 	"getrawtransaction-txid":        "The hash of the transaction",
-	"getrawtransaction-verbose":     "Specifies the transaction is returned as a JSON object instead of a hex-encoded string",
-	"getrawtransaction--condition0": "verbose=false",
-	"getrawtransaction--condition1": "verbose=true",
+	"getrawtransaction-verbose":     "The verbosity level: 0 or false for a hex-encoded string, 1 or true for a JSON object, and 2 for a JSON object with the output each input spends and the fee",
+	"getrawtransaction-blockhash":   "The hash of the block in which to look for the transaction, or \"\" to look as without one",
+	"getrawtransaction-patterns":    "Byte code patterns are not supported, so only false is accepted",
+	"getrawtransaction--condition0": "verbose=0",
+	"getrawtransaction--condition1": "verbose=1 or verbose=2",
 	"getrawtransaction--result0":    "Hex-encoded bytes of the serialized transaction",
 
 	// GetTxOutResult help.
