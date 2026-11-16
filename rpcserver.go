@@ -3243,8 +3243,18 @@ type rpcFilterIndex interface {
 
 // filterIndexFor returns the index of a filter type, or an RPC error when it
 // is not maintained: the committed filter index for the basic filter, the
-// script filter index for the script filter.
+// script filter index for the script filter, the input prefix filter index
+// for the input prefix filter.
 func (s *rpcServer) filterIndexFor(filterType wire.FilterType) (rpcFilterIndex, error) {
+	if filterType == wire.GCSFilterInputPrefix {
+		if s.cfg.RPAFilterIndex == nil {
+			return nil, &btcjson.RPCError{
+				Code:    btcjson.ErrRPCNoCFIndex,
+				Message: "The input prefix filter index must be enabled for this command",
+			}
+		}
+		return s.cfg.RPAFilterIndex, nil
+	}
 	if filterType == wire.GCSFilterScripts {
 		if s.cfg.ScriptFilterIndex == nil {
 			return nil, &btcjson.RPCError{
@@ -6146,6 +6156,9 @@ type rpcserverConfig struct {
 
 	// ScriptFilterIndex serves the script filter type, beside CfIndex.
 	ScriptFilterIndex *indexers.ScriptFilterIndex
+
+	// RPAFilterIndex serves the input prefix filter type.
+	RPAFilterIndex *indexers.RPAFilterIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.

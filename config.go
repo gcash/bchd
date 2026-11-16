@@ -198,6 +198,8 @@ type config struct {
 	DropBcmrIndex           bool          `long:"dropbcmrindex" description:"Deletes the BCMR index from the database on start up and then exits."`
 	NoScriptFilters         bool          `long:"noscriptfilters" description:"Disable the script filter index and serving script filters (filter type 1), which list the scripts of the outputs each block creates and spends, to light clients"`
 	DropScriptFilterIndex   bool          `long:"dropscriptfilterindex" description:"Deletes the script filter index from the database on start up and then exits."`
+	NoRPAFilters            bool          `long:"norpafilters" description:"Disable the input prefix filter index and serving input prefix filters (filter type 2), which list the first bytes of the hashes of each transaction's first 30 inputs, for wallets on reusable payment addresses, to light clients"`
+	DropRPAFilterIndex      bool          `long:"droprpafilterindex" description:"Deletes the input prefix filter index from the database on start up and then exits."`
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`

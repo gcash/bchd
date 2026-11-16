@@ -61,4 +61,4 @@ tool (
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
 
-replace github.com/gcash/bchutil => github.com/CyberAshven/bchutil v0.0.0-20261116141621-211b64bfd27f
+replace github.com/gcash/bchutil => github.com/CyberAshven/bchutil v0.0.0-20261116200120-a7516c53f9b1

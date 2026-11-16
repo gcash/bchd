@@ -340,6 +340,9 @@ type server struct {
 	// scriptFilterIndex serves the script filter type, beside cfIndex.
 	scriptFilterIndex *indexers.ScriptFilterIndex
 
+	// rpaFilterIndex serves the input prefix filter type.
+	rpaFilterIndex *indexers.RPAFilterIndex
+
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.
 	feeEstimator *mempool.FeeEstimator
@@ -1694,6 +1697,14 @@ func scriptFiltersWanted(cfg *config) bool {
 	return !cfg.NoScriptFilters && !cfg.NoCFilters && !cfg.FastSync && !cfg.Prune
 }
 
+// rpaFiltersWanted reports whether the node keeps the input prefix filter
+// index. It does by default, beside the committed filter index, unless that
+// index is off or the node keeps no old blocks: the index is built for every
+// block from genesis.
+func rpaFiltersWanted(cfg *config) bool {
+	return !cfg.NoRPAFilters && !cfg.NoCFilters && !cfg.FastSync && !cfg.Prune
+}
+
 // filterIndexFor returns the index that serves a filter type, or nil when this
 // node does not maintain it.
 func (s *server) filterIndexFor(filterType wire.FilterType) filterIndex {
@@ -1705,6 +1716,10 @@ func (s *server) filterIndexFor(filterType wire.FilterType) filterIndex {
 	case wire.GCSFilterScripts:
 		if s.scriptFilterIndex != nil {
 			return s.scriptFilterIndex
+		}
+	case wire.GCSFilterInputPrefix:
+		if s.rpaFilterIndex != nil {
+			return s.rpaFilterIndex
 		}
 	}
 	return nil
@@ -4382,6 +4397,11 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		s.scriptFilterIndex = indexers.NewScriptFilterIndex(db, chainParams)
 		indexes = append(indexes, s.scriptFilterIndex)
 	}
+	if rpaFiltersWanted(cfg) {
+		indxLog.Info("Input prefix filter index is enabled")
+		s.rpaFilterIndex = indexers.NewRPAFilterIndex(db, chainParams)
+		indexes = append(indexes, s.rpaFilterIndex)
+	}
 
 	// Create an index manager if any of the optional indexes are enabled.
 	var indexManager blockchain.IndexManager
@@ -4447,6 +4467,13 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 		indxLog.Info("Script filter index is disabled: the chain was pruned " +
 			"or fast synced before")
 		s.scriptFilterIndex = nil
+	}
+	// It lacks the older blocks, which the input prefix filter index is
+	// built from.
+	if s.rpaFilterIndex != nil && s.chain.IsPruned() {
+		indxLog.Info("Input prefix filter index is disabled: the chain was " +
+			"pruned or fast synced before")
+		s.rpaFilterIndex = nil
 	}
 
 	// Signal process shutdown when the chain state can't be written.
@@ -4643,6 +4670,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string, db database
 			RPCAuthTimeout: cfg.RPCAuthTimeout,
 
 			ScriptFilterIndex: s.scriptFilterIndex,
+			RPAFilterIndex:    s.rpaFilterIndex,
 		})
 		if err != nil {
 			return nil, err
