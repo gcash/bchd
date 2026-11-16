@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"math/big"
 	"reflect"
 	"testing"
 	"time"
@@ -1091,5 +1092,45 @@ func TestIsInitialBlockDownload(t *testing.T) {
 	if chain.IsInitialBlockDownload() {
 		t.Fatal("a chain that has been current went back into initial " +
 			"block download")
+	}
+}
+
+// TestChainWorkByHash ensures the work of a block's chain is that of each
+// block up to it, for a block of the main chain and of a side chain, and that
+// it is returned as a copy.
+func TestChainWorkByHash(t *testing.T) {
+	chain, nodes := headerTestChain(t, 3)
+	side := newFakeNode(nodes[1], 4, chain.chainParams.PowLimitBits,
+		after(nodes[1], 11*time.Minute))
+	chain.index.AddNode(side)
+
+	// Each regression test block, with the easiest target, adds 2.
+	tests := []struct {
+		name string
+		hash chainhash.Hash
+		want int64
+	}{
+		{"genesis", nodes[0].hash, 2},
+		{"tip", nodes[3].hash, 8},
+		{"side block", side.hash, 6},
+	}
+	for _, test := range tests {
+		work, err := chain.ChainWorkByHash(&test.hash)
+		if err != nil || work.Cmp(big.NewInt(test.want)) != 0 {
+			t.Errorf("%s: got %v, %v, want %d", test.name, work, err,
+				test.want)
+		}
+	}
+
+	work, err := chain.ChainWorkByHash(&nodes[3].hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	work.SetInt64(0)
+	if nodes[3].workSum.Cmp(big.NewInt(8)) != 0 {
+		t.Fatal("changing the returned work changed the block's")
+	}
+	if _, err := chain.ChainWorkByHash(&chainhash.Hash{1}); err == nil {
+		t.Fatal("expected an error for an unknown block")
 	}
 }

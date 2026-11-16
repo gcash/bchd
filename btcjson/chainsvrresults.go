@@ -17,9 +17,12 @@ type GetBlockHeaderVerboseResult struct {
 	VersionHex    string  `json:"versionHex"`
 	MerkleRoot    string  `json:"merkleroot"`
 	Time          int64   `json:"time"`
+	MedianTime    int64   `json:"mediantime"`
 	Nonce         uint64  `json:"nonce"`
 	Bits          string  `json:"bits"`
 	Difficulty    float64 `json:"difficulty"`
+	ChainWork     string  `json:"chainwork"`
+	NTx           uint64  `json:"nTx"`
 	PreviousHash  string  `json:"previousblockhash,omitempty"`
 	NextHash      string  `json:"nextblockhash,omitempty"`
 }
@@ -42,9 +45,12 @@ type GetBlockVerboseResult struct {
 	Tx            []string      `json:"tx,omitempty"`
 	RawTx         []TxRawResult `json:"rawtx,omitempty"` // Note: this field is always empty when verbose != 2.
 	Time          int64         `json:"time"`
+	MedianTime    int64         `json:"mediantime"`
 	Nonce         uint32        `json:"nonce"`
 	Bits          string        `json:"bits"`
 	Difficulty    float64       `json:"difficulty"`
+	ChainWork     string        `json:"chainwork"`
+	NTx           uint64        `json:"nTx"`
 	PreviousHash  string        `json:"previousblockhash"`
 	NextHash      string        `json:"nextblockhash,omitempty"`
 }
@@ -67,9 +73,12 @@ type GetBlockVerboseTxResult struct {
 	MerkleRoot    string        `json:"merkleroot"`
 	Tx            []TxRawResult `json:"tx,omitempty"`
 	Time          int64         `json:"time"`
+	MedianTime    int64         `json:"mediantime"`
 	Nonce         uint32        `json:"nonce"`
 	Bits          string        `json:"bits"`
 	Difficulty    float64       `json:"difficulty"`
+	ChainWork     string        `json:"chainwork"`
+	NTx           uint64        `json:"nTx"`
 	PreviousHash  string        `json:"previousblockhash"`
 	NextHash      string        `json:"nextblockhash,omitempty"`
 }
@@ -141,12 +150,12 @@ type GetBlockChainInfoResult struct {
 	BestBlockHash        string                              `json:"bestblockhash"`
 	Difficulty           float64                             `json:"difficulty"`
 	MedianTime           int64                               `json:"mediantime"`
-	VerificationProgress float64                             `json:"verificationprogress,omitempty"`
+	VerificationProgress float64                             `json:"verificationprogress"`
 	InitialBlockDownload bool                                `json:"initialblockdownload"`
+	ChainWork            string                              `json:"chainwork,omitempty"`
 	SyncHeight           uint64                              `json:"syncheight,omitempty"`
 	Pruned               bool                                `json:"pruned"`
 	PruneHeight          int32                               `json:"pruneheight,omitempty"`
-	ChainWork            string                              `json:"chainwork,omitempty"`
 	SoftForks            []*SoftForkDescription              `json:"softforks"`
 	Bip9SoftForks        map[string]*Bip9SoftForkDescription `json:"bip9_softforks"`
 }
