@@ -416,6 +416,8 @@ func checkCFProof(t *testing.T, node *rpcclient.Client, msg *wire.MsgCFProof,
 		checkCFProofOutput(t, msg, leaf, index)
 	case builder.ScriptLeafSpent:
 		checkCFProofSpent(t, node, msg, leaf, index)
+	case builder.ScriptLeafTransaction:
+		checkCFProofTransaction(t, msg, leaf, index)
 	default:
 		t.Errorf("cfproof %d has kind %d", index, leaves[index].Kind)
 	}
@@ -435,6 +437,22 @@ func checkCFProofOutput(t *testing.T, msg *wire.MsgCFProof, leaf builder.ScriptL
 	}
 	if builder.ScriptKey(msg.Tx.TxOut[leaf.Index].PkScript) != leaf.Key {
 		t.Errorf("cfproof %d output script hashes to a different key", index)
+	}
+}
+
+// checkCFProofTransaction checks the leaf of a transaction's ID: the key is
+// that of the transaction the proof carries, at index 0, and the proof
+// carries no spent transaction.
+func checkCFProofTransaction(t *testing.T, msg *wire.MsgCFProof, leaf builder.ScriptLeaf, index int) {
+	t.Helper()
+	if msg.PrevTx != nil {
+		t.Errorf("cfproof %d is a transaction's ID and carries a spent transaction", index)
+	}
+	if leaf.Index != 0 {
+		t.Errorf("cfproof %d is a transaction's ID at index %d", index, leaf.Index)
+	}
+	if builder.TxidKey(msg.Tx.TxHash()) != leaf.Key {
+		t.Errorf("cfproof %d transaction ID hashes to a different key", index)
 	}
 }
 
@@ -566,12 +584,15 @@ func TestCFRangeAndCFProof(t *testing.T) {
 	defer conn.peer.Disconnect()
 
 	thirdKey := builder.ScriptKey(third)
+	coinbaseID := block.Transactions[0].TxHash()
 	ranges := []struct {
 		name   string
 		bits   uint16
 		prefix [32]byte
 	}{
 		{name: "exact key of the third P2PKH script", bits: 256, prefix: thirdKey},
+		{name: "exact key of the payment's ID", bits: 256, prefix: builder.TxidKey(payment)},
+		{name: "exact key of the coinbase's ID", bits: 256, prefix: builder.TxidKey(coinbaseID)},
 		{name: "exact key of a script the block does not have", bits: 256,
 			prefix: builder.ScriptKey([]byte("no such script"))},
 		{name: "first 4 bits of the third P2PKH key", bits: 4,
@@ -587,14 +608,33 @@ func TestCFRangeAndCFProof(t *testing.T) {
 		checkCFRange(t, tc.name, msg, blockHash, leaves, root, &tc.prefix, tc.bits)
 	}
 
+	// The whole key of a transaction's ID gives that transaction's leaf
+	// alone, at its position in the block.
+	for i, mtx := range block.Transactions {
+		key := builder.TxidKey(mtx.TxHash())
+		msg, ok := conn.askRange(256, key)
+		if !ok {
+			t.Errorf("no cfrange for the ID of transaction %d within %s", i, cfReplyTimeout)
+			continue
+		}
+		run, err := cfParseLeaves(msg.Leaves)
+		want := builder.ScriptLeaf{Key: key, TxIndex: uint32(i), Kind: builder.ScriptLeafTransaction}
+		if err != nil || len(run) != 1 || run[0] != want {
+			t.Errorf("cfrange for the ID of transaction %d: %+v, %v; want only %+v", i, run, err, want)
+		}
+	}
+
 	sawOutput := false
 	sawSpent := false
+	sawTransactions := 0
 	for i := range leaves {
 		switch leaves[i].Kind {
 		case builder.ScriptLeafOutput:
 			sawOutput = true
 		case builder.ScriptLeafSpent:
 			sawSpent = true
+		case builder.ScriptLeafTransaction:
+			sawTransactions++
 		}
 		msg, ok := conn.askProof(uint32(i))
 		if !ok {
@@ -608,6 +648,10 @@ func TestCFRangeAndCFProof(t *testing.T) {
 	}
 	if !sawSpent {
 		t.Errorf("no leaf of an output the block spends")
+	}
+	if sawTransactions != len(block.Transactions) {
+		t.Errorf("%d leaves of transaction IDs in a block of %d transactions",
+			sawTransactions, len(block.Transactions))
 	}
 
 	conn.expectNoRange("regular filter",

@@ -191,7 +191,7 @@ func TestCFProofWire(t *testing.T) {
 		msgTx.LockTime = lockTime
 		return msgTx
 	}
-	for kind := byte(0); kind < 4; kind++ {
+	for kind := byte(0); kind <= 4; kind++ {
 		msg := &wire.MsgCFProof{
 			FilterType: wire.GCSFilterScripts,
 			BlockHash:  chainhash.Hash{4},
