@@ -102,6 +102,24 @@ func TestChainSvrCustomResults(t *testing.T) {
 			expected: `{"txid":"123","vout":1,"scriptSig":{"asm":"0","hex":"00"},"prevOut":{"addresses":["addr1"],"value":0},"sequence":4294967295}`,
 		},
 		{
+			name: "getchaintips",
+			result: []btcjson.GetChainTipsResult{
+				{
+					Height: 2,
+					Hash:   "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+					Status: "active",
+				},
+				{
+					Height:    2,
+					Hash:      "1f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+					BranchLen: 1,
+					Status:    "valid-fork",
+				},
+			},
+			expected: `[{"height":2,"hash":"0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206","branchlen":0,"status":"active"},` +
+				`{"height":2,"hash":"1f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206","branchlen":1,"status":"valid-fork"}]`,
+		},
+		{
 			name: "testmempoolaccept allowed",
 			result: &btcjson.TestMempoolAcceptResult{
 				Txid:    "123",

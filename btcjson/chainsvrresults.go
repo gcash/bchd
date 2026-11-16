@@ -151,6 +151,15 @@ type GetBlockChainInfoResult struct {
 	Bip9SoftForks        map[string]*Bip9SoftForkDescription `json:"bip9_softforks"`
 }
 
+// GetChainTipsResult models each tip of the block tree the getchaintips
+// command returns.
+type GetChainTipsResult struct {
+	Height    int32  `json:"height"`
+	Hash      string `json:"hash"`
+	BranchLen int32  `json:"branchlen"`
+	Status    string `json:"status"`
+}
+
 // GetBlockTemplateResultTx models the transactions field of the
 // getblocktemplate command.
 type GetBlockTemplateResultTx struct {

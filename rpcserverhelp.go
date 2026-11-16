@@ -489,6 +489,19 @@ var helpDescsEnUS = map[string]string{
 	"getcfilterheader-hash":       "The hash of the block",
 	"getcfilterheader--result0":   "The block's gcs filter header",
 
+	// GetChainTipsCmd help.
+	"getchaintips--synopsis": "Returns every tip of the block tree, as in Bitcoin Cash Node: the tip of the main chain, and each block or header off the main chain that nothing builds on, the highest first.",
+
+	// GetChainTipsResult help.
+	"getchaintipsresult-height":    "The height of the tip",
+	"getchaintipsresult-hash":      "The hash of the tip",
+	"getchaintipsresult-branchlen": "The number of blocks from where the tip's branch forks off the main chain to the tip, zero for the main chain",
+	"getchaintipsresult-status": "The status of the branch: 'active' for the tip of the main chain, " +
+		"'valid-fork' for a branch off it whose blocks were all fully validated, " +
+		"'valid-headers' for one whose blocks the node has but has not all fully validated, " +
+		"'headers-only' for one whose valid headers the node has but not every block, " +
+		"'invalid' for one with a block known to be invalid",
+
 	// GetConnectionCountCmd help.
 	"getconnectioncount--synopsis": "Returns the number of active connections to other peers.",
 	"getconnectioncount--result0":  "The number of connections",
@@ -985,6 +998,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"getblockchaininfo":     {(*btcjson.GetBlockChainInfoResult)(nil)},
 	"getcfilter":            {(*string)(nil)},
 	"getcfilterheader":      {(*string)(nil)},
+	"getchaintips":          {(*[]btcjson.GetChainTipsResult)(nil)},
 	"getconnectioncount":    {(*int32)(nil)},
 	"getcurrentnet":         {(*uint32)(nil)},
 	"getdifficulty":         {(*float64)(nil)},

@@ -165,6 +165,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"getblocktemplate":      handleGetBlockTemplate,
 	"getcfilter":            handleGetCFilter,
 	"getcfilterheader":      handleGetCFilterHeader,
+	"getchaintips":          handleGetChainTips,
 	"getconnectioncount":    handleGetConnectionCount,
 	"getcurrentnet":         handleGetCurrentNet,
 	"getdifficulty":         handleGetDifficulty,
@@ -261,7 +262,6 @@ var rpcRemoved = map[string]struct{}{
 
 // Commands that are currently unimplemented, but should ultimately be.
 var rpcUnimplemented = map[string]struct{}{
-	"getchaintips":    {},
 	"getmempoolentry": {},
 	"getwork":         {},
 	"preciousblock":   {},
@@ -3295,6 +3295,21 @@ func handleGetCFilterHeader(s *rpcServer, cmd interface{}, closeNotifier <-chan 
 		return "", err
 	}
 	return hash.String(), nil
+}
+
+// handleGetChainTips implements the getchaintips command.
+func handleGetChainTips(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	tips := s.cfg.Chain.ChainTips()
+	results := make([]btcjson.GetChainTipsResult, len(tips))
+	for i, tip := range tips {
+		results[i] = btcjson.GetChainTipsResult{
+			Height:    tip.Height,
+			Hash:      tip.Hash.String(),
+			BranchLen: tip.BranchLen,
+			Status:    tip.Status.String(),
+		}
+	}
+	return results, nil
 }
 
 // handleGetConnectionCount implements the getconnectioncount command.
