@@ -176,6 +176,22 @@ func bchdMain(serverChan chan<- *server) error {
 
 		return nil
 	}
+	if cfg.DropScriptFilterIndex {
+		if err := indexers.DropScriptFilterIndex(db, interrupt); err != nil {
+			bchdLog.Errorf("%v", err)
+			return err
+		}
+
+		return nil
+	}
+	if cfg.DropRPAFilterIndex {
+		if err := indexers.DropRPAFilterIndex(db, interrupt); err != nil {
+			bchdLog.Errorf("%v", err)
+			return err
+		}
+
+		return nil
+	}
 
 	// Create server and start it.
 	server, err := newServer(cfg.Listeners, cfg.AgentBlacklist, cfg.AgentWhitelist, db, activeNetParams.Params,
