@@ -481,7 +481,11 @@ func checkBlockHeaderSanity(header *wire.BlockHeader, powLimit *big.Int, timeSou
 		return ruleError(ErrInvalidTime, str)
 	}
 
-	// Ensure the block time is not too far in the future.
+	// Ensure the block time is not too far in the future.  A nil time
+	// source leaves this to checkBlockHeaderContext.
+	if timeSource == nil {
+		return nil
+	}
 	maxTimestamp := timeSource.AdjustedTime().Add(time.Second *
 		MaxTimeOffsetSeconds)
 	if header.Timestamp.After(maxTimestamp) {

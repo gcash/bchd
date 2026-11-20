@@ -407,6 +407,91 @@ func TestInvalidHeaderScores(t *testing.T) {
 	}
 }
 
+// TestTooNewHeaderKeepsEarlier ensures the headers before one refused only as
+// too far in the future are kept and their blocks fetched, without cost to the
+// peer and without asking for more headers, and that when the first header is
+// the one refused, the peer's earlier headers that did not connect no longer
+// count against it, as in BCHN.
+func TestTooNewHeaderKeepsEarlier(t *testing.T) {
+	h := newRequestTestHarness(t)
+	a := h.peer(1)
+	height := h.sm.chain.BestSnapshot().Height + 1
+	blocks := h.chainOn(h.tip, height, 3, 0)
+	headers := headersOf(blocks)
+	tooNew := *headers[2]
+	tooNew.Timestamp = time.Unix(time.Now().Add(3*time.Hour).Unix(), 0)
+	resolve(h, &tooNew)
+	headers[2] = &tooNew
+
+	h.announce(a, headers...)
+	h.waitGetData(a, wire.InvTypeBlock, *blocks[1].Hash())
+	h.expectScores()
+	if !h.sm.chain.HaveHeader(blocks[1].Hash()) {
+		t.Fatal("the header before the one too new was not kept")
+	}
+	if hash := tooNew.BlockHash(); h.sm.chain.HaveHeader(&hash) {
+		t.Fatal("the header too new was kept")
+	}
+
+	// Nine headers that don't connect, then one too new on the tip, then
+	// another that doesn't connect: the count started again.
+	for n := byte(1); n <= 9; n++ {
+		h.announce(a, h.unknownParentHeader(n))
+	}
+	onTip := h.tipBlock(0).MsgBlock().Header
+	onTip.Timestamp = time.Unix(time.Now().Add(3*time.Hour).Unix(), 0)
+	resolve(h, &onTip)
+	h.announce(a, &onTip)
+	h.announce(a, h.unknownParentHeader(10))
+	h.expectScores()
+}
+
+// TestTooNewHeaderAfterUpgrade ensures a header 30 minutes ahead of the clock,
+// accepted before the upgrade to 1-minute blocks, is refused as too new after
+// it, and the headers before it are kept and their blocks fetched without
+// cost to the peer.
+func TestTooNewHeaderAfterUpgrade(t *testing.T) {
+	// As in TestBlockDownloadTimeoutInterval, the fifth block after the
+	// tip is the first 1-minute block.
+	activation := uint64(time.Now().Unix() + 90)
+	h := newUpgradeRequestTestHarness(t, activation)
+	a := h.peer(1)
+	blocks := h.chainOn(h.tip, 2, 6, 0)
+	headers := headersOf(blocks)
+	tooNew := *headersOf(h.chainOn(blocks[5].MsgBlock(), 8, 1, 0))[0]
+	tooNew.Timestamp = time.Unix(time.Now().Add(30*time.Minute).Unix(), 0)
+	resolve(h, &tooNew)
+
+	h.announce(a, append(headers, &tooNew)...)
+	h.waitGetData(a, wire.InvTypeBlock, *blocks[5].Hash())
+	h.expectScores()
+	if !h.sm.chain.HaveHeader(blocks[5].Hash()) {
+		t.Fatal("the header before the one too new was not kept")
+	}
+	if hash := tooNew.BlockHash(); h.sm.chain.HaveHeader(&hash) {
+		t.Fatal("the header too new was kept")
+	}
+}
+
+// TestFarFutureInvalidHeader ensures a header more than 2 hours ahead of the
+// clock that is also invalid gets the score of the rule it breaks, and does
+// not start the count of headers that don't connect again.
+func TestFarFutureInvalidHeader(t *testing.T) {
+	h := newRequestTestHarness(t)
+	a := h.peer(1)
+	for n := byte(1); n <= 9; n++ {
+		h.announce(a, h.unknownParentHeader(n))
+	}
+	header := h.tipBlock(0).MsgBlock().Header
+	header.Bits = 0x1f7fffff
+	header.Timestamp = time.Unix(time.Now().Add(3*time.Hour).Unix(), 0)
+	resolve(h, &header)
+	h.announce(a, &header)
+	h.expectScores("100 bad-diffbits")
+	h.announce(a, h.unknownParentHeader(10))
+	h.expectScores("100 bad-diffbits", "20 too-many-unconnected-headers")
+}
+
 // resolve finds a nonce that gives the header valid proof of work.
 func resolve(h *requestTestHarness, header *wire.BlockHeader) {
 	h.t.Helper()

@@ -155,7 +155,8 @@ func processHeaders(t *testing.T, chain *BlockChain, peer int32,
 }
 
 // expectHeaderError fails the test unless processing the headers fails at the
-// header with the passed index with a rule error with the passed code.
+// header with the passed index with a rule error with the passed code, giving
+// the state of the header before it, if any.
 func expectHeaderError(t *testing.T, chain *BlockChain, name string,
 	want ErrorCode, wantIndex int, headers ...*wire.BlockHeader) {
 
@@ -163,10 +164,19 @@ func expectHeaderError(t *testing.T, chain *BlockChain, name string,
 	state, index, err := chain.ProcessBlockHeaders(headers, 1)
 	var rerr RuleError
 	if !errors.As(err, &rerr) || rerr.ErrorCode != want ||
-		index != wantIndex || state != nil {
+		index != wantIndex {
 
 		t.Fatalf("%s: got %v (%v) at index %d, want %v at index %d",
 			name, err, state, index, want, wantIndex)
+	}
+	if wantIndex == 0 && state != nil {
+		t.Fatalf("%s: got state %+v with no header before", name, state)
+	}
+	if wantIndex > 0 && (state == nil ||
+		state.Hash != headers[wantIndex-1].BlockHash()) {
+
+		t.Fatalf("%s: got state %+v, want the header before", name,
+			state)
 	}
 	hash := headers[wantIndex].BlockHash()
 	if chain.headers.lookup(&hash) != nil {
