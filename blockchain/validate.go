@@ -24,9 +24,14 @@ const (
 	oneMegabyte = 1000000
 
 	// MaxTimeOffsetSeconds is the maximum number of seconds a block time
-	// is allowed to be ahead of the current time.  This is currently 2
-	// hours.
+	// is allowed to be ahead of the current time before the upgrade to
+	// 1-minute blocks.  This is 2 hours.
 	MaxTimeOffsetSeconds = 2 * 60 * 60
+
+	// Upgrade2027MaxTimeOffsetSeconds is the maximum number of seconds a
+	// block time is allowed to be ahead of the current time once 1-minute
+	// blocks apply to it.  This is 12 minutes.
+	Upgrade2027MaxTimeOffsetSeconds = 12 * 60
 
 	// MinCoinbaseScriptLen is the minimum length a coinbase script can be.
 	MinCoinbaseScriptLen = 2
@@ -488,6 +493,42 @@ func checkBlockHeaderSanity(header *wire.BlockHeader, powLimit *big.Int, timeSou
 	return nil
 }
 
+// maxBlockTime returns the latest timestamp of a block on prevNode that is
+// accepted when the clock reads now.  It is now plus 2 hours before the upgrade
+// to 1-minute blocks, and now plus 12 minutes after it.  When the median time
+// past of prevNode is already beyond that, only the earliest timestamp it
+// allows is accepted, so the chain can be extended and its lead shrinks, but
+// never one beyond now plus 2 hours.
+func maxBlockTime(prevNode *blockNode, now time.Time) time.Time {
+	now = time.Unix(now.Unix(), 0)
+	legacyLimit := now.Add(MaxTimeOffsetSeconds * time.Second)
+	if !isUpgrade2027Active(prevNode) {
+		return legacyLimit
+	}
+	limit := now.Add(Upgrade2027MaxTimeOffsetSeconds * time.Second)
+	medianTime := prevNode.CalcPastMedianTime()
+	if medianTime.After(limit) {
+		earliest := medianTime.Add(time.Second)
+		if earliest.After(legacyLimit) {
+			return legacyLimit
+		}
+		return earliest
+	}
+	return limit
+}
+
+// MaxBlockTime returns the latest timestamp of a block on the block with the
+// passed hash that is accepted at the current time.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) MaxBlockTime(prevHash *chainhash.Hash) (time.Time, error) {
+	prevNode := b.index.LookupNode(prevHash)
+	if prevNode == nil {
+		return time.Time{}, fmt.Errorf("block %s is not known", prevHash)
+	}
+	return maxBlockTime(prevNode, b.timeSource.AdjustedTime()), nil
+}
+
 // checkBlockSanity performs some preliminary checks on a block to ensure it is
 // sane before continuing with block processing.  These checks are context free.
 //
@@ -799,6 +840,16 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 			"before the previous checkpoint at height %d",
 			blockHeight, checkpointNode.height)
 		return ruleError(ErrForkTooOld, str)
+	}
+
+	// Ensure the block time is not too far in the future for its parent.
+	// It is checked after the work and the chain it builds on, so a
+	// header refused only for its time is otherwise valid.
+	maxTimestamp := maxBlockTime(prevNode, b.timeSource.AdjustedTime())
+	if header.Timestamp.After(maxTimestamp) {
+		str := fmt.Sprintf("block timestamp of %v is after the latest "+
+			"accepted timestamp %v", header.Timestamp, maxTimestamp)
+		return ruleError(ErrTimeTooNew, str)
 	}
 
 	// Reject outdated block versions once a majority of the network

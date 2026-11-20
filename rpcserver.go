@@ -401,6 +401,11 @@ type gbtWorkState struct {
 	maxSigChecks  uint32
 	maxBlockSize  uint64
 	targetTime    int64
+
+	// maxBlockTime returns the latest accepted time of a block on the
+	// passed block.  When it is nil, the limit before the upgrade to
+	// 1-minute blocks applies.
+	maxBlockTime func(prevHash *chainhash.Hash) (time.Time, error)
 }
 
 // newGbtWorkState returns a new instance of a gbtWorkState with all internal
@@ -2897,14 +2902,21 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 	template := state.template
 	msgBlock := template.Block
 	header := &msgBlock.Header
-	adjustedTime := state.timeSource.AdjustedTime()
-	maxTime := adjustedTime.Add(time.Second * blockchain.MaxTimeOffsetSeconds)
+	maxTime := state.timeSource.AdjustedTime().Add(time.Second *
+		blockchain.MaxTimeOffsetSeconds)
+	if state.maxBlockTime != nil {
+		var err error
+		maxTime, err = state.maxBlockTime(&header.PrevBlock)
+		if err != nil {
+			return nil, internalRPCError(err.Error(), "")
+		}
+	}
 	if header.Timestamp.After(maxTime) {
 		return nil, &btcjson.RPCError{
 			Code: btcjson.ErrRPCOutOfRange,
 			Message: fmt.Sprintf("The template time is after the "+
 				"maximum allowed time for a block - template "+
-				"time %v, maximum time %v", adjustedTime,
+				"time %v, maximum time %v", header.Timestamp,
 				maxTime),
 		}
 	}
@@ -6258,6 +6270,7 @@ func newRPCServer(config *rpcserverConfig) (*rpcServer, error) {
 		requestProcessShutdown: make(chan struct{}),
 		quit:                   make(chan int),
 	}
+	rpc.gbtWorkState.maxBlockTime = config.Chain.MaxBlockTime
 	if cfg.RPCUser != "" && cfg.RPCPass != "" {
 		login := cfg.RPCUser + ":" + cfg.RPCPass
 		auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(login))

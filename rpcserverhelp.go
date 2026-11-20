@@ -486,7 +486,7 @@ var helpDescsEnUS = map[string]string{
 	"getblocktemplateresult-submitold":                  "Not applicable",
 	"getblocktemplateresult-target":                     "Hex-encoded big-endian number which valid results must be less than",
 	"getblocktemplateresult-expires":                    "Maximum number of seconds (starting from when the server sent the response) this work is valid for",
-	"getblocktemplateresult-maxtime":                    "Maximum allowed time",
+	"getblocktemplateresult-maxtime":                    "The latest block time this node accepts, in seconds since 1 Jan 1970 GMT; it moves forward with the node's clock",
 	"getblocktemplateresult-mintime":                    "Minimum allowed time",
 	"getblocktemplateresult-mutable":                    "List of mutations the server explicitly allows",
 	"getblocktemplateresult-noncerange":                 "Two concatenated hex-encoded big-endian 32-bit integers which represent the valid ranges of nonces the miner may scan",
