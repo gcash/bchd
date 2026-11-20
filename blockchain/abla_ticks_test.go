@@ -403,10 +403,6 @@ func TestABLATicksValidation(t *testing.T) {
 		case "cfg_scaling_zero", "cfg_scaling_overflow":
 			// BCHD has no internal scaling factor.
 			continue
-		case "cfg_maxima_sum_overflow":
-			// The config check has no guard against a hand-built
-			// epsilonMax + betaMax of 2^64; SetMax never sets one.
-			continue
 		}
 		config := defaultABLAConfig(32000000, test.FixedSize)
 		for _, field := range []struct {
@@ -1114,5 +1110,19 @@ func TestABLAScaledLimitAboveFloor(t *testing.T) {
 	}
 	if got := chain.MaxBlockSize(true, true); got != 888888 {
 		t.Fatalf("max block size %d, want 888888", got)
+	}
+}
+
+// TestABLAConfigMaximaSum ensures a config whose epsilonMax + betaMax just
+// fits in 64 bits is accepted and one whose sum overflows is refused.
+func TestABLAConfigMaximaSum(t *testing.T) {
+	config := defaultABLAConfig(32000000, false)
+	config.epsilonMax = math.MaxUint64 - config.betaMax
+	if errs := config.IsValid(); errs != nil {
+		t.Fatalf("a sum of 2^64 - 1 is refused: %v", errs)
+	}
+	config.epsilonMax++
+	if config.IsValid() == nil {
+		t.Fatal("a sum of 2^64 is accepted")
 	}
 }

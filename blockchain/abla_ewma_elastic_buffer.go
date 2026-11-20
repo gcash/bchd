@@ -5,6 +5,7 @@ package blockchain
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -123,6 +124,12 @@ func (config *ABLAConfig) IsValid() (errs *strings.Builder) {
 	if config.beta0 > config.betaMax {
 		errs = new(strings.Builder)
 		errs.WriteString("Error, initial elastic buffer size sanity check failed (betaMax).")
+		return errs
+	}
+	// A state may reach both maxima, and the block size limit is their sum.
+	if config.epsilonMax > math.MaxUint64-config.betaMax {
+		errs = new(strings.Builder)
+		errs.WriteString("Error, epsilonMax + betaMax sanity check failed (overflow).")
 		return errs
 	}
 	if config.zetaXB7 < MIN_ZETA_XB7 || config.zetaXB7 > MAX_ZETA_XB7 {
