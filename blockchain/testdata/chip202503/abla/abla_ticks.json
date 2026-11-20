@@ -1553,7 +1553,7 @@
         "blockSize": "0",
         "epsilon": "0",
         "beta": "0",
-        "tau": "0",
+        "tau": "600",
         "accept": false,
         "note": "the default-constructed State is NOT a valid consensus state (control 0 < epsilon0); use State(config, size) or FromTuple"
       },

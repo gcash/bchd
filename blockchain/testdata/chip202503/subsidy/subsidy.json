@@ -1,5 +1,5 @@
 {
-  "description": "Tick-scaled block subsidy vectors, full schedule. halvings = chunk(tick) / chunks_per_era, where chunk(tick) = ceil(tick / 600) is the 600-tick chunk containing the block's interval and chunks_per_era is the network's halving interval in chunks (210,000 on the BCH networks, 150 on regtest); subsidy = ((50e8 >> halvings) * tau) / 600. On the tau-600 schedule chunk(h) == h, so this equals the legacy height/chunks_per_era form at every height. Keying on the chunk (not the raw end tick) is required: under a 60-tick cadence a chunk holds ten blocks, and only its last has an end tick on the chunk boundary, so a raw tick key would assign nine of them the previous era's double subsidy. With the chunk key every era total equals the legacy ideal up to the per-block truncation, and the activation grand total is 20,999,999.7270 BCH (the documented 0.2499 BCH shortfall); a raw tick key would give 21,000,002.5395 BCH. On tau 60 a block's subsidy equals the tau-600 subsidy at the same tick / 10 with integer truncation, exact for every halving. `chunk` is tick / 600. Halving ticks are schedule-independent; halving heights are not. Era tables give per-era block counts and totals. Every schedule emitted here belongs to a BCH network and so uses 210,000 chunks per era; elapsed era length is chunks_per_era * 600 ticks, i.e. 126,000,000 ticks on these networks. Regtest's 150-chunk era is pinned in the self-test only. Short-interval schedules are spot-checked at the first, last nonzero, and first zero halving, with grand totals emitted but not fully tabulated: 3 s changing at block 123,456, and 1 s from block 1. The 3 s total matches the CHIP shortfall table's row exactly. The 1 s total is 200 satoshis above its row, because the table assumes a first era of 126,000,000 equal-interval blocks, whereas the actual first era holds the 600-tick genesis block in place of 600 one-second blocks (5e9 mod (600/tau), zero for tau 3 and 60, at most 200 satoshis).",
+  "description": "Tick-scaled block subsidy vectors, full schedule. halvings = chunk(tick) / chunks_per_era, where chunk(tick) = ceil(tick / 600) is the 600-tick chunk containing the block's interval and chunks_per_era is the network's halving interval in chunks (210,000 on the BCH networks, 150 on regtest); subsidy = ((50e8 >> halvings) * tau) / 600. On the tau-600 schedule chunk(h) == h, so this equals the legacy height/chunks_per_era form at every height. Keying on the chunk (not the raw end tick) is required: under a 60-tick cadence a chunk holds ten blocks, and only its last has an end tick on the chunk boundary, so a raw tick key would assign nine of them the previous era's double subsidy. With the chunk key every era total equals the legacy ideal up to the per-block truncation, and the activation grand total is 20,999,999.7270 BCH (the documented 0.2499 BCH shortfall); a raw tick key would give 21,000,002.5395 BCH. On tau 60 a block's subsidy equals the tau-600 subsidy at the same tick / 10 with integer truncation, exact for every halving. `chunk` is ceil(tick / 600). Halving ticks are schedule-independent; halving heights are not. Era tables give per-era block counts and totals. Every schedule emitted here belongs to a BCH network and so uses 210,000 chunks per era; elapsed era length is chunks_per_era * 600 ticks, i.e. 126,000,000 ticks on these networks. Regtest's 150-chunk era is pinned in the self-test, and here only by the blockSpotChecks rows whose chunksPerEra is 150, which use the schedule tau60_0 (60 ticks from block 1); that schedule has no entry in `totals`. blockSpotChecks holds single blocks, each with its own chunksPerEra: genesis on every schedule, the blocks either side of activation, the ninth and tenth block of chunk 1,050,000 (the first chunk of era 5, where the chunk key gives both the era-5 subsidy and a raw tick key would still pay the ninth the era-4 subsidy), and the blocks either side of regtest's first halving at tau 60. Short-interval schedules are spot-checked at the first, last nonzero, and first zero halving, with grand totals emitted but not fully tabulated: 3 s changing at block 123,456, and 1 s from block 1. The 3 s total matches the CHIP shortfall table's row exactly. The 1 s total is 200 satoshis above its row, because the table assumes a first era of 126,000,000 equal-interval blocks, whereas the actual first era holds the 600-tick genesis block in place of 600 one-second blocks (5e9 mod (600/tau), zero for tau 3 and 60, at most 200 satoshis).",
   "constants": {
     "CHUNKS_PER_ERA_BCH": "210000",
     "CHUNKS_PER_ERA_REGTEST": "150",
@@ -42,6 +42,15 @@
         {
           "height": "0",
           "tau": "1"
+        }
+      ]
+    },
+    {
+      "name": "tau60_0",
+      "schedule": [
+        {
+          "height": "0",
+          "tau": "60"
         }
       ]
     }
@@ -3028,6 +3037,140 @@
       "schedule": "tau1_0",
       "totalSats": "2099998404000200",
       "totalBCH": "20999984.040002"
+    }
+  ],
+  "blockSpotChecks": [
+    {
+      "name": "genesis_empty",
+      "schedule": "empty",
+      "chunksPerEra": "210000",
+      "height": "0",
+      "tick": "0",
+      "chunk": "0",
+      "tau": "600",
+      "subsidySats": "5000000000",
+      "halvingsCount": "0",
+      "note": "genesis: tick 0, chunk 0, 50 BCH"
+    },
+    {
+      "name": "genesis_activation_1M",
+      "schedule": "activation_1M",
+      "chunksPerEra": "210000",
+      "height": "0",
+      "tick": "0",
+      "chunk": "0",
+      "tau": "600",
+      "subsidySats": "5000000000",
+      "halvingsCount": "0",
+      "note": "genesis: tick 0, chunk 0, 50 BCH"
+    },
+    {
+      "name": "genesis_tau3_123456",
+      "schedule": "tau3_123456",
+      "chunksPerEra": "210000",
+      "height": "0",
+      "tick": "0",
+      "chunk": "0",
+      "tau": "600",
+      "subsidySats": "5000000000",
+      "halvingsCount": "0",
+      "note": "genesis: tick 0, chunk 0, 50 BCH"
+    },
+    {
+      "name": "genesis_tau1_0",
+      "schedule": "tau1_0",
+      "chunksPerEra": "210000",
+      "height": "0",
+      "tick": "0",
+      "chunk": "0",
+      "tau": "600",
+      "subsidySats": "5000000000",
+      "halvingsCount": "0",
+      "note": "genesis keeps the 600-tick interval and the full 50 BCH even though the schedule entry is at height 0: an entry sets the interval for the blocks after its height"
+    },
+    {
+      "name": "genesis_tau60_0_regtest",
+      "schedule": "tau60_0",
+      "chunksPerEra": "150",
+      "height": "0",
+      "tick": "0",
+      "chunk": "0",
+      "tau": "600",
+      "subsidySats": "5000000000",
+      "halvingsCount": "0",
+      "note": "as genesis_tau1_0, under regtest's 150-chunk era"
+    },
+    {
+      "name": "activation_last_600",
+      "schedule": "activation_1M",
+      "chunksPerEra": "210000",
+      "height": "1000000",
+      "tick": "600000000",
+      "chunk": "1000000",
+      "tau": "600",
+      "subsidySats": "312500000",
+      "halvingsCount": "4",
+      "note": "H_a, the last 600-tick block: era 4, 3.125 BCH"
+    },
+    {
+      "name": "activation_first_60",
+      "schedule": "activation_1M",
+      "chunksPerEra": "210000",
+      "height": "1000001",
+      "tick": "600000060",
+      "chunk": "1000001",
+      "tau": "60",
+      "subsidySats": "31250000",
+      "halvingsCount": "4",
+      "note": "H_a + 1, the first 60-tick block: same era, one tenth of the subsidy of H_a. Its end tick is not a multiple of 600 and its chunk is ceil(600,000,060 / 600) = 1,000,001"
+    },
+    {
+      "name": "chunk_key_ninth_of_chunk",
+      "schedule": "activation_1M",
+      "chunksPerEra": "210000",
+      "height": "1499999",
+      "tick": "629999940",
+      "chunk": "1050000",
+      "tau": "60",
+      "subsidySats": "15625000",
+      "halvingsCount": "5",
+      "note": "ninth block of chunk 1,050,000, the first chunk of era 5: 0.15625 BCH. A raw-tick key, 629,999,940 / 126,000,000 = 4, puts it in era 4 and pays 31,250,000 sats, double"
+    },
+    {
+      "name": "chunk_key_last_of_chunk",
+      "schedule": "activation_1M",
+      "chunksPerEra": "210000",
+      "height": "1500000",
+      "tick": "630000000",
+      "chunk": "1050000",
+      "tau": "60",
+      "subsidySats": "15625000",
+      "halvingsCount": "5",
+      "note": "tenth and last block of the same chunk, end tick exactly 5 * 126,000,000: 0.15625 BCH, the same as the block before it. The two keys agree here, so a raw-tick key shows a halving between 1,499,999 and 1,500,000 where there is none"
+    },
+    {
+      "name": "regtest_tau60_before",
+      "schedule": "tau60_0",
+      "chunksPerEra": "150",
+      "height": "1490",
+      "tick": "89400",
+      "chunk": "149",
+      "tau": "60",
+      "subsidySats": "500000000",
+      "halvingsCount": "0",
+      "note": "regtest, 60-tick blocks from block 1: last block of chunk 149, the last of era 0, 5 BCH"
+    },
+    {
+      "name": "regtest_tau60_at",
+      "schedule": "tau60_0",
+      "chunksPerEra": "150",
+      "height": "1491",
+      "tick": "89460",
+      "chunk": "150",
+      "tau": "60",
+      "subsidySats": "250000000",
+      "halvingsCount": "1",
+      "note": "first block of chunk 150 = first block of regtest era 1: 2.5 BCH. A raw-tick key, 89,460 / 90,000 = 0, still pays 5 BCH here and for the eight blocks after it"
     }
   ]
 }

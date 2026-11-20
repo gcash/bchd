@@ -123,7 +123,13 @@ type subsidyVectorFile struct {
 	ErasActivation       []subsidyEraVector     `json:"erasActivation"`
 	CumulativeLegacy     []subsidyCumVector     `json:"cumulativeLegacy"`
 	CumulativeActivation []subsidyCumVector     `json:"cumulativeActivation"`
-	Totals               []struct {
+	BlockSpotChecks      []struct {
+		Name         string `json:"name"`
+		ChunksPerEra string `json:"chunksPerEra"`
+		Schedule     string `json:"schedule"`
+		subsidyBlockVector
+	} `json:"blockSpotChecks"`
+	Totals []struct {
 		Schedule  string `json:"schedule"`
 		TotalSats string `json:"totalSats"`
 	} `json:"totals"`
@@ -232,7 +238,8 @@ func (s subsidySchedule) total(t *testing.T, params *chaincfg.Params) int64 {
 }
 
 // TestCalcBlockSubsidyVectors runs the CHIP-2025-03 subsidy vectors: the
-// blocks around every halving, the subsidy of every era and the totals, for
+// blocks around every halving, single blocks, the subsidy of every era and the
+// totals, for
 // 10-minute blocks, an activation of 1-minute blocks after block 1,000,000
 // and the 3- and 1-second schedules.
 func TestCalcBlockSubsidyVectors(t *testing.T) {
@@ -315,7 +322,9 @@ func TestCalcBlockSubsidyVectors(t *testing.T) {
 		return TickSchedule{}, false
 	}
 
-	checkBlock := func(name string, b subsidyBlockVector) {
+	checkBlock := func(name string, b subsidyBlockVector,
+		params *chaincfg.Params) {
+
 		t.Helper()
 		s := schedule(name)
 		height, ticks, tau := num(b.Height), num(b.Tick), num(b.Tau)
@@ -351,8 +360,8 @@ func TestCalcBlockSubsidyVectors(t *testing.T) {
 		t.Fatalf("%d halving vectors, want 72", len(halvings))
 	}
 	for _, v := range halvings {
-		checkBlock(v.Schedule, v.Before)
-		checkBlock(v.Schedule, v.At)
+		checkBlock(v.Schedule, v.Before, params)
+		checkBlock(v.Schedule, v.At, params)
 		if num(v.At.Height) != num(v.Before.Height)+1 ||
 			num(v.At.Height) != num(v.BoundaryHeight) ||
 			num(v.At.Chunk) != num(v.BoundaryChunk) ||
@@ -362,6 +371,23 @@ func TestCalcBlockSubsidyVectors(t *testing.T) {
 			t.Errorf("%s: halving %s vector is inconsistent",
 				v.Schedule, v.Halving)
 		}
+	}
+
+	// The spot checks of single blocks, some with the eras of regtest.
+	if len(vectors.BlockSpotChecks) != 11 {
+		t.Fatalf("%d block spot checks, want 11",
+			len(vectors.BlockSpotChecks))
+	}
+	for _, v := range vectors.BlockSpotChecks {
+		p := params
+		switch num(v.ChunksPerEra) {
+		case int64(params.SubsidyReductionInterval):
+		case int64(chaincfg.RegressionNetParams.SubsidyReductionInterval):
+			p = &chaincfg.RegressionNetParams
+		default:
+			t.Fatalf("%s: %s chunks per era", v.Name, v.ChunksPerEra)
+		}
+		checkBlock(v.Schedule, v.subsidyBlockVector, p)
 	}
 
 	// Add up every block of the 10-minute and activation schedules.

@@ -29,24 +29,28 @@ type timelockVectorFile struct {
 			Tau    string `json:"tau"`
 		} `json:"schedule"`
 	} `json:"schedules"`
-	Vectors []struct {
-		Name              string            `json:"name"`
-		Kind              string            `json:"kind"`
-		Schedule          string            `json:"schedule"`
-		Args              map[string]string `json:"args"`
-		SubjectIsCoinbase bool              `json:"subjectIsCoinbase"`
-		Expected          struct {
-			ReleaseBlock string `json:"releaseBlock"`
-			Blocks       []struct {
-				Block  string `json:"block"`
-				Result bool   `json:"result"`
-			} `json:"blocks"`
-			Mempool []struct {
-				Tip    string `json:"tip"`
-				Result bool   `json:"result"`
-			} `json:"mempool"`
-		} `json:"expected"`
-	} `json:"vectors"`
+	Vectors         []timelockVector `json:"vectors"`
+	TimeModeVectors []timelockVector `json:"timeModeVectors"`
+}
+
+// timelockVector is one of the CHIP-2025-03 timelock vectors.
+type timelockVector struct {
+	Name              string            `json:"name"`
+	Kind              string            `json:"kind"`
+	Schedule          string            `json:"schedule"`
+	Args              map[string]string `json:"args"`
+	SubjectIsCoinbase bool              `json:"subjectIsCoinbase"`
+	Expected          struct {
+		ReleaseBlock string `json:"releaseBlock"`
+		Blocks       []struct {
+			Block  string `json:"block"`
+			Result bool   `json:"result"`
+		} `json:"blocks"`
+		Mempool []struct {
+			Tip    string `json:"tip"`
+			Result bool   `json:"result"`
+		} `json:"mempool"`
+	} `json:"expected"`
 }
 
 // vectorSchedule is a tick schedule of the vectors: blocks after each entry's
@@ -68,7 +72,8 @@ func (s vectorSchedule) ticks(height int64) int64 {
 }
 
 // TestTimelockVectors runs the CHIP-2025-03 timelock vectors from fablous
-// 9c4b023 against the lock time, sequence lock and coinbase maturity rules.
+// 0c26633 against the lock time, sequence lock and coinbase maturity rules,
+// the time-mode lock times at the median time past the vector gives.
 // The schedules with at most one change to 60 ticks are also run through the
 // exported functions with a TickSchedule.  A coinbase is final whatever its
 // lock time only from the block after the activation block.
@@ -101,8 +106,9 @@ func TestTimelockVectors(t *testing.T) {
 
 		t.Fatalf("constants %v", vectors.Constants)
 	}
-	if len(vectors.Vectors) != 27 {
-		t.Fatalf("%d vectors, want 27", len(vectors.Vectors))
+	if len(vectors.Vectors) != 31 || len(vectors.TimeModeVectors) != 5 {
+		t.Fatalf("%d vectors and %d time-mode vectors, want 31 and 5",
+			len(vectors.Vectors), len(vectors.TimeModeVectors))
 	}
 
 	// The schedules, and the activation height of those a TickSchedule
@@ -145,7 +151,8 @@ func TestTimelockVectors(t *testing.T) {
 	}
 
 	var coinbaseRows, ran int
-	for _, v := range vectors.Vectors {
+	all := append(vectors.Vectors, vectors.TimeModeVectors...)
+	for _, v := range all {
 		sched, ok := schedules[v.Schedule]
 		if !ok {
 			t.Fatalf("%s: unknown schedule %q", v.Name, v.Schedule)
@@ -173,8 +180,12 @@ func TestTimelockVectors(t *testing.T) {
 				if v.SubjectIsCoinbase && !active {
 					coinbaseRows++
 				}
+				var blockTime int64
+				if s, ok := v.Args["blockTime"]; ok {
+					blockTime = num(s)
+				}
 				got = IsFinalizedTransaction(tx, ticks,
-					time.Unix(0, 0), active)
+					time.Unix(blockTime, 0), active)
 
 			case "sequence":
 				coin := num(v.Args["fundingBlock"])
@@ -226,7 +237,12 @@ func TestTimelockVectors(t *testing.T) {
 			}
 			check(num(b.Block), b.Result, "block "+b.Block)
 		}
-		if release != num(v.Expected.ReleaseBlock) {
+		// A vector with no release block is never final.
+		wantRelease := int64(-1)
+		if v.Expected.ReleaseBlock != "" {
+			wantRelease = num(v.Expected.ReleaseBlock)
+		}
+		if release != wantRelease {
 			t.Errorf("%s: first final block %d, want release block "+
 				"%s", v.Name, release, v.Expected.ReleaseBlock)
 		}
@@ -234,9 +250,9 @@ func TestTimelockVectors(t *testing.T) {
 			check(num(m.Tip)+1, m.Result, "mempool tip "+m.Tip)
 		}
 	}
-	if coinbaseRows != 12 {
+	if coinbaseRows != 18 {
 		t.Errorf("checked %d coinbase rows at or below the activation "+
-			"block, want 12", coinbaseRows)
+			"block, want 18", coinbaseRows)
 	}
 	if ran == 0 {
 		t.Fatal("no vectors ran")

@@ -1,5 +1,5 @@
 {
-  "description": "Tick-normalized height-mode time-lock vectors: nLockTime, nSequence, and coinbase maturity. T(x) is the cumulative tick of block x, inclusive of its own interval, from the schedule. Height-mode predicates: nLockTime is strict and absolute — final in block b iff T(b) > 600*lockTime; nSequence is weak and relative — mature in block b iff T(b) - T(fundingBlock) >= 600*relativeLock; coinbase maturity is weak and absolute — spendable in block b iff T(b) - T(creationBlock) >= 60,000. Mempool forms use T(tip+1) from the schedule, never T(tip)+tau(tip). BCHN escape clauses: nLockTime==0 is final everywhere; every-input-SEQUENCE_FINAL is final regardless of nLockTime. A coinbase transaction is exempt from both predicates, but only from H_a + 1 onward: at or before H_a both fields bind and the coinbase is evaluated like any other transaction. The exemption is a scope restriction on the predicates, so it lives in the caller behind the same upgrade predicate the rest of the rule set uses; the coinbase vectors model that short circuit via `subjectIsCoinbase`, gated on the upgrade boundary at H_a + 1, and lock_noncoinbase_bip54_twin pins that an identical non-coinbase is still bound. Coinbase maturity is unaffected, because it reads the spent output's height and a coinbase spends none. MTP-mode comparison and the LOCKTIME_THRESHOLD split are unchanged and out of scope. Every expected value is a hand-derived golden pin; the generator verifies the shared reference evaluators (timelock_ticks.h) against the pins and refuses to emit on any mismatch. All integer values are decimal strings to preserve full 64-bit precision.",
+  "description": "Tick-normalized height-mode time-lock vectors: nLockTime, nSequence, and coinbase maturity. T(x) is the cumulative tick of block x, inclusive of its own interval, from the schedule. Height-mode predicates: nLockTime is strict and absolute — final in block b iff T(b) > 600*lockTime; nSequence is weak and relative — mature in block b iff T(b) - T(fundingBlock) >= 600*relativeLock; coinbase maturity is weak and absolute — spendable in block b iff T(b) - T(creationBlock) >= 60,000. Mempool forms use T(tip+1) from the schedule, never T(tip)+tau(tip). BCHN escape clauses: nLockTime==0 is final everywhere; every-input-SEQUENCE_FINAL is final regardless of nLockTime. A coinbase transaction is exempt from both predicates, but only from H_a + 1 onward: at or before H_a both fields bind and the coinbase is evaluated like any other transaction. The exemption is a scope restriction on the predicates, so it lives in the caller behind the same upgrade predicate the rest of the rule set uses; the coinbase vectors model that short circuit via `subjectIsCoinbase`, gated on the upgrade boundary at H_a + 1, and lock_noncoinbase_bip54_twin pins that an identical non-coinbase is still bound. Coinbase maturity is unaffected, because it reads the spent output's height and a coinbase spends none. The time-mode comparison and the LOCKTIME_THRESHOLD split are unchanged. `vectors` holds the height-mode vectors: no row there carries a blockTime, the time-mode arm is evaluated with block time 0 (so every time-mode locktime is treated as not yet reached), and releaseBlock is always a decimal string. `timeModeVectors` is a separate list with the same row layout plus `args.blockTime`, which applies only there: the value the time-mode arm compares against (final iff lockTime < blockTime), supplied unchanged at every block and mempool check of that vector. Under BIP 113 a node passes the median-time-past of the evaluated block's parent (for the mempool, of the tip) there, not the block's own timestamp. In these vectors the exemption gate is by height (b > H_a) and independent of blockTime, whereas a node derives both from the same median-time-past; a consumer must set its activation gate separately from the cutoff. The supplied 1,800,000,000 is before activation for an activation time of 15 May 2027 (1,810,382,400, mainnet); a consumer that derives its activation gate from the same time must use parameters whose activation time is later than the cutoff (so not chipnet's earlier activation time, 1,794,744,000), or set the gate by height as these vectors do. It is not the cutoff a chain has at H_a + 1, which is why the rows that pin the exemption use an nLockTime far past activation. In `timeModeVectors` releaseBlock is the smallest block at which the predicate holds given that constant blockTime, or null if it holds at no block. Every expected value is a hand-derived golden pin; the generator verifies the shared reference evaluators (timelock_ticks.h) against the pins and refuses to emit on any mismatch. All integer values are decimal strings to preserve full 64-bit precision.",
   "constants": {
     "BASE_BLOCK_INTERVAL_TIME": "600",
     "LOCK_UNIT_TICKS": "600",
@@ -694,7 +694,7 @@
         ],
         "mempool": []
       },
-      "note": "Time-mode nLockTime (>= LOCKTIME_THRESHOLD), far ahead of any block timestamp: the harness supplies nBlockTime = 0, so the pre-activation time-mode arm reports non-final everywhere at or below H_a. The exemption covers the time-mode arm too, but only from H_a + 1."
+      "note": "Time-mode nLockTime (>= LOCKTIME_THRESHOLD), evaluated with the harness default nBlockTime = 0, so the pre-activation time-mode arm reports non-final everywhere at or below H_a. The value is only a time-mode marker: as a timestamp it is in 1989, so a real lock-time cutoff would make it final by the ordinary rule; timeModeVectors holds the rows with a realistic cutoff. The exemption covers the time-mode arm too, but only from H_a + 1."
     },
     {
       "name": "lock_coinbase_zero_sequence",
@@ -790,6 +790,329 @@
         "mempool": []
       },
       "note": "The exemption is a post-upgrade rule, not an unconditional property of coinbases: with nLockTime = 1 and a non-final sequence this coinbase is non-final at blocks 0 and 1 and final from block 2, all well below H_a. A harness that bypassed every coinbase would report release 0 here -- which is exactly the defect this family shipped with."
+    },
+    {
+      "name": "lock_height_mode_max",
+      "schedule": "empty",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "499999999",
+        "inputSequence": "0xfffffffe"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "500000000",
+        "blocks": [
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "499999999",
+            "result": false
+          },
+          {
+            "block": "500000000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "The largest height-mode nLockTime (LOCKTIME_THRESHOLD - 1). It is compared in ticks, T(b) > 600 * 499,999,999 = 299,999,999,400 (a product that needs more than 32 bits), and releases at block 500,000,000 on the 600-tick schedule. An implementation that treated this value as time-mode would never release it here, where no block time is supplied; lock_time_mode_min in timeModeVectors is the value one higher."
+    },
+    {
+      "name": "seq_post_n0_fund_Ha",
+      "schedule": "activation_1M",
+      "kind": "sequence",
+      "args": {
+        "fundingBlock": "1000000",
+        "relativeLock": "0"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000000",
+        "blocks": [
+          {
+            "block": "999999",
+            "result": false
+          },
+          {
+            "block": "1000000",
+            "result": true
+          },
+          {
+            "block": "1000001",
+            "result": true
+          }
+        ],
+        "mempool": [
+          {
+            "tip": "999999",
+            "result": true
+          },
+          {
+            "tip": "1000000",
+            "result": true
+          }
+        ]
+      },
+      "note": "relativeLock 0 with BIP 68 enforced (version 2, disable flag clear): mature in the funding block itself, T(b) - T(fundingBlock) >= 0, and false only below it (the underflow guard). The mempool check at tip 999,999 is the next block being the funding block."
+    },
+    {
+      "name": "seq_post_cross_Ha_n2",
+      "schedule": "activation_1M",
+      "kind": "sequence",
+      "args": {
+        "fundingBlock": "999999",
+        "relativeLock": "2"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000010",
+        "blocks": [
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "1000001",
+            "result": false
+          },
+          {
+            "block": "1000009",
+            "result": false
+          },
+          {
+            "block": "1000010",
+            "result": true
+          }
+        ],
+        "mempool": [
+          {
+            "tip": "1000000",
+            "result": false
+          },
+          {
+            "tip": "1000008",
+            "result": false
+          },
+          {
+            "tip": "1000009",
+            "result": true
+          }
+        ]
+      },
+      "note": "funded one block before H_a with n=2: T(999,999) = 599,999,400, so the lock needs tick 600,000,600 = block 1,000,010. The 1,200 ticks are block H_a (600) plus ten 1-minute blocks; seq_post_straddle stops at H_a and never mixes the two intervals. Both wrong forms accept it early: the block count at block 1,000,001 (1,000,001 - 999,999 = 2), and T(tip) + tau(tip) = 600,000,600 in the mempool at tip = H_a. seq_post_fund_Ha_n1 catches those two as well. Only this row catches converting n into a block count with a single interval: that of the block after funding releases it at 1,000,001, that of the spend block at 1,000,019."
+    },
+    {
+      "name": "mat_post_mempool_tip_Ha",
+      "schedule": "activation_1M",
+      "kind": "maturity",
+      "args": {
+        "creationBlock": "999901"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "1000010",
+        "blocks": [
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "1000001",
+            "result": false
+          },
+          {
+            "block": "1000009",
+            "result": false
+          },
+          {
+            "block": "1000010",
+            "result": true
+          }
+        ],
+        "mempool": [
+          {
+            "tip": "1000000",
+            "result": false
+          },
+          {
+            "tip": "1000008",
+            "result": false
+          },
+          {
+            "tip": "1000009",
+            "result": true
+          }
+        ]
+      },
+      "note": "coinbase created 99 blocks before H_a: T(999,901) = 599,940,600, so it matures at tick 600,000,600 = block 1,000,010. The mempool check at tip = H_a evaluates block H_a + 1 with T(H_a + 1) = 600,000,060 from the schedule, 59,460 ticks after creation: not spendable. Both wrong forms accept it there: the block count (1,000,001 - 999,901 = 100) and T(tip) + tau(tip) = 600,000,600."
+    }
+  ],
+  "timeModeVectors": [
+    {
+      "name": "lock_coinbase_time_mode_above",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "2000000001",
+        "inputSequence": "0xfffffffe",
+        "blockTime": "1800000000"
+      },
+      "subjectIsCoinbase": true,
+      "expected": {
+        "releaseBlock": "1000001",
+        "blocks": [
+          {
+            "block": "999999",
+            "result": false
+          },
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "1000001",
+            "result": true
+          },
+          {
+            "block": "1000002",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "Time-mode nLockTime 2,000,000,001 (2033), far above the supplied cutoff of 1,800,000,000 and above any cutoff a chain can have around the upgrade, with a non-final input sequence. At H_a the upgrade is not active, the time-mode arm runs and the lock is not below the cutoff: the coinbase is non-final and block H_a is invalid. At H_a + 1 the same coinbase is final, and only the exemption can be what frees it: the ordinary rule still rejects it, as lock_noncoinbase_time_mode_twin shows. The value is far past activation on purpose. In a node the cutoff at H_a + 1 is the median-time-past that activated the upgrade, so a lock just above 1,800,000,000 would be final there by the ordinary rule and would not test the exemption."
+    },
+    {
+      "name": "lock_coinbase_time_mode_equal",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1800000000",
+        "inputSequence": "0xfffffffe",
+        "blockTime": "1800000000"
+      },
+      "subjectIsCoinbase": true,
+      "expected": {
+        "releaseBlock": "1000001",
+        "blocks": [
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "1000001",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "Pins the strict comparison at H_a, not the exemption: nLockTime equal to the supplied cutoff is still non-final there (final iff lockTime < cutoff), which is what tells < from <=. The result at H_a + 1 is by exemption in this harness, which holds the cutoff constant; under a real post-activation cutoff, which is above 1,800,000,000, the ordinary rule would make it final as well."
+    },
+    {
+      "name": "lock_coinbase_time_mode_below",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "1799999999",
+        "inputSequence": "0xfffffffe",
+        "blockTime": "1800000000"
+      },
+      "subjectIsCoinbase": true,
+      "expected": {
+        "releaseBlock": "0",
+        "blocks": [
+          {
+            "block": "0",
+            "result": true
+          },
+          {
+            "block": "999999",
+            "result": true
+          },
+          {
+            "block": "1000000",
+            "result": true
+          },
+          {
+            "block": "1000001",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "The other side of the strict comparison at H_a: nLockTime one second below the supplied cutoff is final at H_a by the ordinary time-mode rule, with no exemption involved, and still final after it. Because the vector supplies the same cutoff at every block, the release block is 0; the check that matters is the one at H_a."
+    },
+    {
+      "name": "lock_noncoinbase_time_mode_twin",
+      "schedule": "activation_1M",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "2000000001",
+        "inputSequence": "0xfffffffe",
+        "blockTime": "1800000000"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": null,
+        "blocks": [
+          {
+            "block": "1000000",
+            "result": false
+          },
+          {
+            "block": "1000001",
+            "result": false
+          },
+          {
+            "block": "1000002",
+            "result": false
+          },
+          {
+            "block": "2000000",
+            "result": false
+          }
+        ],
+        "mempool": [
+          {
+            "tip": "1000000",
+            "result": false
+          }
+        ]
+      },
+      "note": "Non-coinbase twin of lock_coinbase_time_mode_above: identical fields and cutoff, only the subject differs. It stays non-final above H_a, in blocks and in the mempool, so the exemption does not relax the time-mode arm for anyone else; with nLockTime 2,000,000,001 that holds for any cutoff a chain can have around the upgrade, not only the one supplied. Under a constant cutoff below nLockTime no block releases it, so releaseBlock is null."
+    },
+    {
+      "name": "lock_time_mode_min",
+      "schedule": "empty",
+      "kind": "locktime",
+      "args": {
+        "lockTime": "500000000",
+        "inputSequence": "0xfffffffe",
+        "blockTime": "1800000000"
+      },
+      "subjectIsCoinbase": false,
+      "expected": {
+        "releaseBlock": "0",
+        "blocks": [
+          {
+            "block": "0",
+            "result": true
+          },
+          {
+            "block": "1000000",
+            "result": true
+          },
+          {
+            "block": "500000000",
+            "result": true
+          }
+        ],
+        "mempool": []
+      },
+      "note": "The smallest time-mode nLockTime (LOCKTIME_THRESHOLD): compared against the supplied cutoff of 1,800,000,000 and so final at every block, where lock_height_mode_max in `vectors`, one lower, is height-mode and not final below block 500,000,000."
     }
   ]
 }
