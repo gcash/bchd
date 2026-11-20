@@ -12,11 +12,6 @@ import (
 )
 
 const (
-	// maxAllowedOffsetSeconds is the maximum number of seconds in either
-	// direction that local clock will be adjusted.  When the median time
-	// of the network is outside of this range, no offset will be applied.
-	maxAllowedOffsetSecs = 70 * 60 // 1 hour 10 minutes
-
 	// similarTimeSecs is the number of seconds in either direction from the
 	// local clock that is used to determine that it is likely wrong and
 	// hence to show a warning.
@@ -24,6 +19,14 @@ const (
 )
 
 var (
+	// maxAllowedOffsetSecs is the maximum number of seconds in either
+	// direction that local clock will be adjusted.  When the median time
+	// of the network is outside of this range, no offset will be applied.
+	// It is zero, so the peers do not move the local clock, as in Bitcoin
+	// Cash Node.  This is a variable as opposed to a constant so the test
+	// code can modify it.
+	maxAllowedOffsetSecs int64
+
 	// maxMedianTimeEntries is the maximum number of entries allowed in the
 	// median time data.  This is a variable as opposed to a constant so the
 	// test code can modify it.
@@ -159,7 +162,7 @@ func (m *medianTime) AddTimeSample(sourceID string, timeVal time.Time) {
 
 	// Set the new offset when the median offset is within the allowed
 	// offset range.
-	if math.Abs(float64(median)) < maxAllowedOffsetSecs {
+	if math.Abs(float64(median)) <= float64(maxAllowedOffsetSecs) {
 		m.offsetSecs = median
 	} else {
 		// The median offset of all added time data is larger than the
@@ -168,13 +171,15 @@ func (m *medianTime) AddTimeSample(sourceID string, timeVal time.Time) {
 		m.offsetSecs = 0
 
 		if !m.invalidTimeChecked {
-			m.invalidTimeChecked = true
-
 			// Find if any time samples have a time that is close
-			// to the local time.
+			// to the local time but not the same.  With no offset
+			// allowed, the median is usually a few seconds off,
+			// so the check is repeated until it warns once.
 			var remoteHasCloseTime bool
 			for _, offset := range sortedOffsets {
-				if math.Abs(float64(offset)) < similarTimeSecs {
+				if offset != 0 &&
+					math.Abs(float64(offset)) < similarTimeSecs {
+
 					remoteHasCloseTime = true
 					break
 				}
@@ -182,6 +187,7 @@ func (m *medianTime) AddTimeSample(sourceID string, timeVal time.Time) {
 
 			// Warn if none of the time samples are close.
 			if !remoteHasCloseTime {
+				m.invalidTimeChecked = true
 				log.Warnf("Please check your date and time " +
 					"are correct!  bchd will not work " +
 					"properly with an invalid time")
