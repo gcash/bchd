@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"runtime"
 	"time"
 
@@ -197,6 +198,18 @@ type testGenerator struct {
 
 	// Common key for any tests which require signed transactions.
 	privKey *bchec.PrivateKey
+
+	// upgrade2027Height is the height of the upgrade 2027 activation
+	// block, after which blocks are 60-tick blocks, or -1 when the
+	// upgrade never applies.
+	upgrade2027Height int32
+
+	// tickTimes stamps each block with the genesis time plus its ticks
+	// and sets the ASERT bits of a chain anchored at the genesis block
+	// with anchorBits, which such times keep at the anchor target scaled
+	// to the block interval.
+	tickTimes  bool
+	anchorBits uint32
 }
 
 // makeTestGenerator returns a test generator instance initialized with the
@@ -214,7 +227,49 @@ func makeTestGenerator(params *chaincfg.Params) (testGenerator, error) {
 		tipName:      "genesis",
 		tipHeight:    0,
 		privKey:      privKey,
+
+		upgrade2027Height: -1,
 	}, nil
+}
+
+// blockInterval returns the target interval in ticks of the block at the
+// passed height.
+func (g *testGenerator) blockInterval(height int32) int64 {
+	if g.upgrade2027Height < 0 || height <= g.upgrade2027Height {
+		return 600
+	}
+	return 60
+}
+
+// blockTicks returns the ticks of the block at the passed height.
+func (g *testGenerator) blockTicks(height int32) int64 {
+	if g.upgrade2027Height < 0 || height <= g.upgrade2027Height {
+		return int64(height) * 600
+	}
+	return int64(g.upgrade2027Height)*600 +
+		int64(height-g.upgrade2027Height)*60
+}
+
+// spendableHeight returns the height of the first block that may spend the
+// coinbase of the block at the passed height.
+func (g *testGenerator) spendableHeight(coinbaseHeight int32) int32 {
+	maturity := int64(g.params.CoinbaseMaturity) * 600
+	height := coinbaseHeight + 1
+	for g.blockTicks(height)-g.blockTicks(coinbaseHeight) < maturity {
+		height++
+	}
+	return height
+}
+
+// blockBits returns the bits of the block at the passed height of a chain
+// stamped with tickTimes.
+func (g *testGenerator) blockBits(height int32) uint32 {
+	if !g.tickTimes {
+		return g.params.PowLimitBits
+	}
+	target := blockchain.CompactToBig(g.anchorBits)
+	target.Mul(target, big.NewInt(600/g.blockInterval(height)))
+	return blockchain.BigToCompact(target)
 }
 
 // payToScriptHashScript returns a standard pay-to-script-hash for the provided
@@ -301,7 +356,10 @@ func (g *testGenerator) createCoinbaseTx(blockHeight int32) *wire.MsgTx {
 		panic(err)
 	}
 
-	tx := wire.NewMsgTx(1)
+	// Version 2 keeps the coinbase clear of the version 1, lock time 0
+	// shape that the 1-minute block upgrade forbids for coinbases paying 25
+	// BCH or more.
+	tx := wire.NewMsgTx(2)
 	tx.AddTxIn(&wire.TxIn{
 		// Coinbase transactions have no inputs, so previous outpoint is
 		// zero hash and max index.
@@ -311,7 +369,8 @@ func (g *testGenerator) createCoinbaseTx(blockHeight int32) *wire.MsgTx {
 		SignatureScript: coinbaseScript,
 	})
 	tx.AddTxOut(&wire.TxOut{
-		Value:    blockchain.CalcBlockSubsidy(blockHeight, g.params),
+		Value: blockchain.CalcBlockSubsidy(g.blockTicks(blockHeight),
+			g.blockInterval(blockHeight), g.params),
 		PkScript: opTrueScript,
 	})
 
@@ -525,9 +584,13 @@ func (g *testGenerator) nextBlock(blockName string, spend *spendableOut, mungers
 	}
 
 	// Use a timestamp that is one second after the previous block unless
-	// this is the first block in which case the current time is used.
+	// this is the first block in which case the current time is used, or
+	// the block's ticks after the genesis time.
 	var ts time.Time
-	if nextHeight == 1 {
+	if g.tickTimes {
+		ts = g.params.GenesisBlock.Header.Timestamp.Add(
+			time.Duration(g.blockTicks(nextHeight)) * time.Second)
+	} else if nextHeight == 1 {
 		ts = time.Unix(time.Now().Unix(), 0)
 	} else {
 		ts = g.tip.Header.Timestamp.Add(time.Second)
@@ -538,7 +601,7 @@ func (g *testGenerator) nextBlock(blockName string, spend *spendableOut, mungers
 			Version:    1,
 			PrevBlock:  g.tip.BlockHash(),
 			MerkleRoot: calcMerkleRoot(txns),
-			Bits:       g.params.PowLimitBits,
+			Bits:       g.blockBits(nextHeight),
 			Timestamp:  ts,
 			Nonce:      0, // To be solved.
 		},
@@ -900,7 +963,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   genesis -> bm0 -> bm1 -> ... -> bm99
 	// ---------------------------------------------------------------------
 
-	coinbaseMaturity := g.params.CoinbaseMaturity
+	coinbaseMaturity := uint16(g.spendableHeight(1) - 1)
 	var testInstances []TestInstance
 	for i := range coinbaseMaturity {
 		blockName := fmt.Sprintf("bm%d", i)
@@ -2028,7 +2091,7 @@ func GenerateWithTxs(chainLength int, txsPerBlock int) (tests [][]TestInstance, 
 	//   genesis -> bm0 -> bm1 -> ... -> bm100
 	// ---------------------------------------------------------------------
 
-	coinbaseMaturity := g.params.CoinbaseMaturity
+	coinbaseMaturity := uint16(g.spendableHeight(1) - 1)
 	var testInstances []TestInstance
 	for i := range uint16(coinbaseMaturity + 1) {
 		blockName := fmt.Sprintf("bm%d", i)
@@ -2163,7 +2226,7 @@ func GenerateGreatWallTestBlocks() (tests [][]TestInstance, err error) {
 			isOrphan}
 	}
 
-	coinbaseMaturity := g.params.CoinbaseMaturity
+	coinbaseMaturity := uint16(g.spendableHeight(1) - 1)
 	var testInstances []TestInstance
 	for i := range uint16(coinbaseMaturity + 1) {
 		blockName := fmt.Sprintf("bm%d", i)
@@ -2316,7 +2379,7 @@ func GenerateGravitonTestBlocks() (tests [][]TestInstance, err error) {
 		return RejectedBlock{blockName, block, blockHeight, code}
 	}
 
-	coinbaseMaturity := g.params.CoinbaseMaturity
+	coinbaseMaturity := uint16(g.spendableHeight(1) - 1)
 	var testInstances []TestInstance
 	for i := range uint16(coinbaseMaturity + 1) {
 		blockName := fmt.Sprintf("bm%d", i)
@@ -2516,7 +2579,7 @@ func GeneratePhononBlocks() (tests [][]TestInstance, err error) {
 		return RejectedBlock{blockName, block, blockHeight, code}
 	}
 
-	coinbaseMaturity := g.params.CoinbaseMaturity
+	coinbaseMaturity := uint16(g.spendableHeight(1) - 1)
 	var testInstances []TestInstance
 	for i := range coinbaseMaturity {
 		blockName := fmt.Sprintf("bm%d", i)
@@ -2879,7 +2942,7 @@ func GenerateCosmicInflationBlocks() (tests [][]TestInstance, err error) {
 			isOrphan}
 	}
 
-	coinbaseMaturity := g.params.CoinbaseMaturity
+	coinbaseMaturity := uint16(g.spendableHeight(1) - 1)
 	var testInstances []TestInstance
 	for i := range coinbaseMaturity {
 		blockName := fmt.Sprintf("bm%d", i)

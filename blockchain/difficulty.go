@@ -30,8 +30,8 @@ const (
 	// to fetch the previous two.
 	difficultyAdjustmentWindow = 144
 
-	// idealBlockTime is used by the Asert difficulty adjustment algorithm. It equals
-	// 10 minutes between blocks.
+	// idealBlockTime is the target interval of the Asert anchor block, which
+	// is 10 minutes on every network.
 	idealBlockTime = 600
 
 	// radix is used by the Asert difficulty adjustment algorithm.
@@ -287,31 +287,52 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	return 0, errors.New("unknown difficulty algorithm")
 }
 
+// errAsertAnchorTicks is returned when the parent of a block has fewer ticks
+// than the ASERT anchor block, which only a chain that activated 1-minute
+// blocks before the anchor can have.
+var errAsertAnchorTicks = errors.New("block ticks are below the ASERT anchor")
+
 func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, anchorBlockHeight int32, anchorBlockTime int64, anchorBlockBits uint32, evalTimestamp time.Time) (uint32, error) {
+	// The anchor ticks assume 600-tick blocks up to the anchor.  This is
+	// checked before the minimum difficulty rule so that such a chain
+	// cannot use it to get past the check.
+	tickDelta := lastNode.ticks - int64(anchorBlockHeight)*idealBlockTime
+	if tickDelta < 0 {
+		return 0, errAsertAnchorTicks
+	}
+
 	// For networks that support it, allow special reduction of the
-	// required difficulty once too much time has elapsed without
-	// mining a block.
+	// required difficulty once more than two target intervals of the new
+	// block have elapsed without mining a block.
 	if b.chainParams.ReduceMinDifficulty {
-		// Return minimum difficulty when more than the desired
-		// amount of time has elapsed without mining a block.
-		reductionTime := int64(b.chainParams.MinDiffReductionTime /
-			time.Second)
-		allowMinTime := lastNode.timestamp + reductionTime
+		allowMinTime := lastNode.timestamp + 2*int64(lastNode.nextInterval)
 		if evalTimestamp.Unix() > allowMinTime {
 			return b.chainParams.PowLimitBits, nil
 		}
 	}
 
-	target := CompactToBig(anchorBlockBits)
+	target := calcAsertTarget(CompactToBig(anchorBlockBits), idealBlockTime,
+		int64(lastNode.nextInterval), lastNode.timestamp-anchorBlockTime,
+		tickDelta, b.chainParams.AsertDifficultyHalflife,
+		b.chainParams.PowLimit)
+	return BigToCompact(target), nil
+}
 
-	tDelta := lastNode.timestamp - anchorBlockTime
-	hDelta := lastNode.height - anchorBlockHeight
+// calcAsertTarget returns the ASERT target for a block with the passed
+// target interval, given the target and interval of the anchor block, the
+// time since the parent of the anchor block and the ticks since the anchor
+// block, both up to the parent of the block.  The result is between 1 and
+// powLimit.
+func calcAsertTarget(anchorTarget *big.Int, anchorInterval, nextInterval,
+	tDelta, tickDelta, halfLife int64, powLimit *big.Int) *big.Int {
+
+	target := new(big.Int).Set(anchorTarget)
 	bigRadix := big.NewInt(radix)
 
-	// exponent = int(((time_diff - IDEAL_BLOCK_TIME * (height_diff + 1)) * RADIX) / HALFLIFE)
-	exponent := new(big.Int).Sub(big.NewInt(tDelta), new(big.Int).Mul(big.NewInt(int64(idealBlockTime)), new(big.Int).Add(big.NewInt(int64(hDelta)), big.NewInt(1))))
+	// exponent = int(((time_diff - (tick_diff + anchor_interval)) * RADIX) / HALFLIFE)
+	exponent := new(big.Int).Sub(big.NewInt(tDelta), new(big.Int).Add(big.NewInt(tickDelta), big.NewInt(anchorInterval)))
 	exponent.Mul(exponent, bigRadix)
-	exponent.Quo(exponent, big.NewInt(b.chainParams.AsertDifficultyHalflife))
+	exponent.Quo(exponent, big.NewInt(halfLife))
 
 	// shifts = exponent >> RBITS
 	shifts := new(big.Int).Rsh(exponent, rbits)
@@ -338,17 +359,30 @@ func (b *BlockChain) calcAsertRequiredDifficulty(lastNode *blockNode, anchorBloc
 	// target >>= RBITS
 	target.Rsh(target, rbits)
 
+	// Scale the target by the ratio of the anchor interval to the interval
+	// of the new block.  Big integers do not wrap, so a target past 2^256
+	// is clamped to powLimit below.  When dividing, a 256-bit target would
+	// have been set to powLimit on overflow first, so do the same here.
+	if anchorInterval >= nextInterval {
+		target.Mul(target, big.NewInt(anchorInterval/nextInterval))
+	} else {
+		if target.BitLen() > 256 {
+			target.Set(powLimit)
+		}
+		target.Quo(target, big.NewInt(nextInterval/anchorInterval))
+	}
+
 	// If target is zero
-	if target.Cmp(big.NewInt(0)) == 0 {
-		return BigToCompact(big.NewInt(1)), nil
+	if target.Sign() == 0 {
+		return big.NewInt(1)
 	}
 
-	if target.Cmp(b.chainParams.PowLimit) > 0 {
+	if target.Cmp(powLimit) > 0 {
 		// Return softest target
-		return b.chainParams.PowLimitBits, nil
+		return new(big.Int).Set(powLimit)
 	}
 
-	return BigToCompact(target), nil
+	return target
 }
 
 func (b *BlockChain) calcDAARequiredDifficulty(lastNode *blockNode, newBlockTime time.Time) (uint32, error) {

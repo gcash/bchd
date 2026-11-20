@@ -348,9 +348,9 @@ type HeaderState struct {
 // ContextualCheckBlockHeader, validation.cpp:3685-3781, 3901-4007), and keeps
 // the headers of the blocks the chain doesn't have, as sent by the peer with
 // the passed ID, until their blocks arrive.  It returns the state of the last
-// header or, for the first one that fails, the error and the header's index.
-// A header that doesn't fit in the header tree fails with an error that is not
-// a RuleError.
+// header or, for the first one that fails, the error, the header's index and
+// the state of the last header before it, if any.  A header that doesn't fit
+// in the header tree fails with an error that is not a RuleError.
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) ProcessBlockHeaders(headers []*wire.BlockHeader, peerID int32) (*HeaderState, int, error) {
@@ -358,28 +358,35 @@ func (b *BlockChain) ProcessBlockHeaders(headers []*wire.BlockHeader, peerID int
 	defer b.chainLock.Unlock()
 
 	b.headers.prune(b)
-	var node, added *blockNode
+	var last, added *blockNode
 	for i, header := range headers {
-		var isNew bool
-		var err error
-		node, isNew, err = b.processBlockHeader(header, peerID, added)
+		node, isNew, err := b.processBlockHeader(header, peerID, added)
 		if err != nil {
-			return nil, i, err
+			return b.headerState(last), i, err
 		}
+		last = node
 		added = nil
 		if isNew {
 			added = node
 		}
 	}
+	return b.headerState(last), -1, nil
+}
+
+// headerState returns the state of the passed block or kept header, or nil
+// when it is nil.
+//
+// This function MUST be called with the chain state lock held (for reads).
+func (b *BlockChain) headerState(node *blockNode) *HeaderState {
 	if node == nil {
-		return nil, -1, nil
+		return nil
 	}
 	return &HeaderState{
 		Hash:    node.hash,
 		Height:  node.height,
 		Work:    new(big.Int).Set(node.workSum),
 		WorkCmp: node.workSum.Cmp(b.bestChain.Tip().workSum),
-	}, -1, nil
+	}
 }
 
 // processBlockHeader processes the header for ProcessBlockHeaders and returns
@@ -400,8 +407,10 @@ func (b *BlockChain) processBlockHeader(header *wire.BlockHeader, peerID int32, 
 		return node, false, nil
 	}
 
-	err := checkBlockHeaderSanity(header, b.chainParams.PowLimit,
-		b.timeSource, BFNone)
+	// The time is checked against the parent, after the other checks, so
+	// a header refused only as too new is otherwise valid.
+	err := checkBlockHeaderSanity(header, b.chainParams.PowLimit, nil,
+		BFNone)
 	if err != nil {
 		return nil, false, err
 	}
@@ -423,7 +432,7 @@ func (b *BlockChain) processBlockHeader(header *wire.BlockHeader, peerID int32, 
 		return nil, false, err
 	}
 
-	node := newBlockNode(header, prevNode)
+	node := newBlockNode(header, prevNode, b.upgrade2027ActivationTime)
 	if !b.headers.add(node, peerID, b.bestChain.Tip().workSum) {
 		return nil, false, errHeaderTreeFull
 	}

@@ -126,10 +126,9 @@ func newAddrUnspentHarnessWith(tb testing.TB,
 			AcceptNonStd: true,
 			MaxTxVersion: 2,
 		},
-		ChainParams:    &params,
-		FetchUtxoView:  chain.FetchUtxoView,
-		BestHeight:     func() int32 { return chain.BestSnapshot().Height },
-		MedianTimePast: func() time.Time { return chain.BestSnapshot().MedianTime },
+		ChainParams:   &params,
+		FetchUtxoView: chain.FetchUtxoView,
+		BestSnapshot:  chain.BestSnapshot,
 		CalcSequenceLock: func(tx *bchutil.Tx,
 			view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 

@@ -7,6 +7,7 @@ package mining
 import (
 	"container/heap"
 	"math/rand"
+	"os"
 	"testing"
 
 	"github.com/gcash/bchd/blockchain"
@@ -15,6 +16,20 @@ import (
 
 	"github.com/gcash/bchutil"
 )
+
+// TestMain runs the tests with the upgrade to 1-minute blocks never active
+// on every network, since the template tests stamp their blocks with the wall
+// clock.
+func TestMain(m *testing.M) {
+	for _, params := range []*chaincfg.Params{&chaincfg.MainNetParams,
+		&chaincfg.TestNet3Params, &chaincfg.TestNet4Params,
+		&chaincfg.ChipNetParams, &chaincfg.RegressionNetParams,
+		&chaincfg.SimNetParams} {
+
+		params.Upgrade2027ActivationTime = 1<<48 - 1
+	}
+	os.Exit(m.Run())
+}
 
 // TestTxFeePrioHeap ensures the priority queue pops transactions by fee per
 // kilobyte, highest first.
@@ -110,7 +125,9 @@ func Test_createCoinbaseTx(t *testing.T) {
 				t.Fatal(err)
 			}
 			coinbase, err := createCoinbaseTx(test.params,
-				coinbaseScript[:len(coinbaseScript)-2], test.height, test.addr)
+				coinbaseScript[:len(coinbaseScript)-2],
+				blockchain.NewTickSchedule(test.height, 0, false),
+				test.addr)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,5 +146,39 @@ func Test_createCoinbaseTx(t *testing.T) {
 					magneticAnomalyActive, upgrade9Active, err)
 			}
 		})
+	}
+}
+
+// TestCoinbaseSubsidy ensures the template coinbase pays the subsidy of the
+// block's interval: 50 BCH up to and including the upgrade 2027 activation
+// block and 5 BCH after it.
+func TestCoinbaseSubsidy(t *testing.T) {
+	params := &chaincfg.RegressionNetParams
+	tests := []struct {
+		sched blockchain.TickSchedule
+		want  int64
+	}{
+		{blockchain.NewTickSchedule(101, 0, false), 5000000000},
+		{blockchain.NewTickSchedule(100, 100, true), 5000000000},
+		{blockchain.NewTickSchedule(101, 100, true), 500000000},
+		// Block 591 ends at tick 89,460, in the first chunk of
+		// regtest's second era.
+		{blockchain.NewTickSchedule(590, 100, true), 500000000},
+		{blockchain.NewTickSchedule(591, 100, true), 250000000},
+	}
+	for _, test := range tests {
+		script, err := standardCoinbaseScript(test.sched.NextHeight(), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cb, err := createCoinbaseTx(params, script, test.sched, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := cb.MsgTx().TxOut[0].Value; got != test.want {
+			ha, active := test.sched.Active()
+			t.Errorf("block %d (activation %d, %v): subsidy %d, want %d",
+				test.sched.NextHeight(), ha, active, got, test.want)
+		}
 	}
 }

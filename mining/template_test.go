@@ -6,8 +6,10 @@ package mining
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg"
@@ -436,5 +438,186 @@ func TestTemplateMinFeeRounding(t *testing.T) {
 
 		t.Fatalf("template has %d txs, want the coinbase and %v, not %v",
 			n, exact.TxHash(), short.TxHash())
+	}
+}
+
+// TestTemplateCoinbaseEscapesForbiddenShape ensures a template coinbase paying
+// 25 BCH or more is not version 1, so it can never have the shape the
+// 1-minute block upgrade forbids for coinbases.
+func TestTemplateCoinbaseEscapesForbiddenShape(t *testing.T) {
+	h := newTemplateHarness(t, templateParams(), 32000000, bigPolicy)
+	h.mineN(101)
+	h.src.add(spend(h.cbTxs[0], 1000), 1000)
+
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	cb := tmpl.Block.Transactions[0]
+	var total int64
+	for _, out := range cb.TxOut {
+		total += out.Value
+	}
+	if total < 25*bchutil.SatoshiPerBitcoin {
+		t.Fatalf("coinbase pays %d, want at least 25 BCH", total)
+	}
+	if cb.Version != 2 {
+		t.Errorf("coinbase has version %d, want 2", cb.Version)
+	}
+}
+
+// TestTemplateTimelocksInTicks ensures the template checks lock times,
+// sequence locks and coinbase maturity for the ticks of the next block on a
+// chain where every block after the genesis block is 60 ticks.  After tip
+// 1005 the next block is at 60,360 ticks, so the coinbase of block 6 is
+// mature and that of block 7 is not, a lock time of 100 has passed and one
+// of 101 has not, and relative locks of 100 units on an input from block 3
+// and of 101 units on one from block 2 have passed and have not.
+func TestTemplateTimelocksInTicks(t *testing.T) {
+	params := templateParams()
+	params.Upgrade2027ActivationTime = 1
+	h := newTemplateHarness(t, params, 32000000, bigPolicy)
+	h.mineN(1005)
+	next := h.chain.BestSnapshot().TickSchedule.NextBlockTicks()
+	if next != 60360 {
+		t.Fatalf("next block at %d ticks, want 60360", next)
+	}
+
+	locked := func(cb int, lockTime, sequence uint32) *wire.MsgTx {
+		tx := spend(h.cbTxs[cb-1], 1000)
+		tx.TxIn[0].Sequence = sequence
+		tx.LockTime = lockTime
+		return tx
+	}
+	tests := []struct {
+		name string
+		tx   *wire.MsgTx
+		want bool
+	}{
+		{"mature coinbase", locked(6, 0, wire.MaxTxInSequenceNum), true},
+		{"immature coinbase", locked(7, 0, wire.MaxTxInSequenceNum), false},
+		{"passed lock time", locked(5, 100, 0), true},
+		{"lock time at the next block", locked(4, 101, 0), false},
+		{"passed relative lock", locked(3, 0, 100), true},
+		{"relative lock", locked(2, 0, 101), false},
+	}
+	for _, test := range tests {
+		h.src.add(test.tx, 1000)
+	}
+	tmpl, err := h.gen.NewBlockTemplate(nil)
+	if err != nil {
+		t.Fatalf("NewBlockTemplate: %v", err)
+	}
+	for _, test := range tests {
+		if templateHas(tmpl, test.tx) != test.want {
+			t.Errorf("%s: included %v, want %v", test.name,
+				!test.want, test.want)
+		}
+	}
+}
+
+// TestPolicyBlockMaxSize ensures the configured block max size is a size per
+// 600 seconds, scaled down with integer division for a shorter block as in
+// CHIP-2025-03.
+func TestPolicyBlockMaxSize(t *testing.T) {
+	tests := []struct {
+		maxSize  uint32
+		interval int64
+		want     uint64
+	}{
+		{0, 600, 0},
+		{0, 60, 0},
+		{1000000, 600, 1000000},
+		{1000000, 60, 100000},
+		{1009, 60, 100},
+		{math.MaxUint32, 600, math.MaxUint32},
+		{math.MaxUint32, 60, math.MaxUint32 / 10},
+	}
+	for _, test := range tests {
+		p := Policy{BlockMaxSize: test.maxSize}
+		if got := p.blockMaxSize(test.interval); got != test.want {
+			t.Errorf("BlockMaxSize %d at %d s: got %d, want %d",
+				test.maxSize, test.interval, got, test.want)
+		}
+	}
+}
+
+// TestTemplateSizeAcrossUpgrade2027 ensures a template for the activation
+// block, or for any block when the upgrade never activates, uses the
+// configured block max size and the limit as they are, and a template for
+// the first 60-second block a tenth of both.
+func TestTemplateSizeAcrossUpgrade2027(t *testing.T) {
+	const (
+		floor    = 1000000
+		maxSize  = 500000
+		padSize  = 20000
+		ha       = 110
+		interval = 600 * time.Second
+	)
+	// Block i is stamped start+(i-1)*600, so the median time of block ha
+	// is the time of block ha-5 and block ha is the activation block.
+	start := time.Now().Add(-2 * ha * interval).Truncate(time.Second)
+	params := ablaParams()
+	params.Upgrade2027ActivationTime = uint64(start.Add((ha - 6) *
+		interval).Unix())
+	neverParams := ablaParams()
+	neverParams.Upgrade2027ActivationTime = 1<<48 - 1
+
+	tests := []struct {
+		name         string
+		params       chaincfg.Params
+		policy       Policy
+		tipHeight    int32
+		wantInterval int64
+		wantLimit    uint64
+		wantTxns     int
+	}{
+		{"never active", neverParams, Policy{BlockMaxSize: maxSize}, ha,
+			600, floor, 5},
+		{"activation block", params, Policy{BlockMaxSize: maxSize}, ha - 1,
+			600, floor, 5},
+		{"first 60-second block", params, Policy{BlockMaxSize: maxSize}, ha,
+			60, floor / 10, 3},
+		{"first 60-second block, no size set", params, Policy{}, ha, 60,
+			floor / 10, 5},
+	}
+	for _, test := range tests {
+		h := newTemplateHarness(t, test.params, floor, test.policy)
+		h.nextTS = start
+		for range test.tipHeight {
+			h.mine()
+		}
+		best := h.chain.BestSnapshot()
+		if best.NextBlockInterval != test.wantInterval {
+			t.Fatalf("%s: next block interval %d, want %d", test.name,
+				best.NextBlockInterval, test.wantInterval)
+		}
+
+		// Four transactions of over 20 KB each.  A tenth of the
+		// configured size holds two, a tenth of the limit all four.
+		for i := range 4 {
+			tx := spend(h.cbTxs[i], 1000)
+			tx.TxOut[1].PkScript = append([]byte{txscript.OP_RETURN},
+				make([]byte, padSize)...)
+			h.src.add(tx, 1000)
+		}
+		tmpl, err := h.gen.NewBlockTemplate(nil)
+		if err != nil {
+			t.Fatalf("%s: NewBlockTemplate: %v", test.name, err)
+		}
+		if tmpl.MaxBlockSize != test.wantLimit {
+			t.Errorf("%s: template MaxBlockSize %d, want %d", test.name,
+				tmpl.MaxBlockSize, test.wantLimit)
+		}
+		wantSigChecks := test.wantLimit /
+			blockchain.BlockMaxBytesMaxSigChecksRatio
+		if uint64(tmpl.MaxSigChecks) != wantSigChecks {
+			t.Errorf("%s: template MaxSigChecks %d, want %d", test.name,
+				tmpl.MaxSigChecks, wantSigChecks)
+		}
+		if n := len(tmpl.Block.Transactions); n != test.wantTxns {
+			t.Errorf("%s: template has %d transactions, want %d",
+				test.name, n, test.wantTxns)
+		}
 	}
 }

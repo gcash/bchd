@@ -5,12 +5,14 @@
 package blockchain
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/gcash/bchd/chaincfg"
 	"github.com/gcash/bchd/chaincfg/chainhash"
+	"github.com/gcash/bchd/database"
 	"github.com/gcash/bchd/wire"
 	"github.com/gcash/bchutil"
 )
@@ -178,6 +180,12 @@ func TestCalcSequenceLock(t *testing.T) {
 	nextMedianTime := node.CalcPastMedianTime().Unix()
 	nextBlockHeight := int32(numBlocksToActivate) + 1
 
+	// heightLock returns the ticks of a height-based lock that ends with
+	// the block at the passed height, as every block here is 600 ticks.
+	heightLock := func(height int32) int64 {
+		return int64(height+1)*600 - 1
+	}
+
 	// Add an additional transaction which will serve as our unconfirmed
 	// output.
 	unConfTx := &wire.MsgTx{
@@ -214,8 +222,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     -1,
-				BlockHeight: -1,
+				Seconds:    -1,
+				BlockTicks: -1,
 			},
 		},
 		// A transaction with a single input with max sequence number.
@@ -231,8 +239,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     -1,
-				BlockHeight: -1,
+				Seconds:    -1,
+				BlockTicks: -1,
 			},
 		},
 		// A transaction with a single input whose lock time is
@@ -251,8 +259,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     medianTime - 1,
-				BlockHeight: -1,
+				Seconds:    medianTime - 1,
+				BlockTicks: -1,
 			},
 		},
 		// A transaction with a single input whose lock time is
@@ -269,8 +277,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     medianTime + 1023,
-				BlockHeight: -1,
+				Seconds:    medianTime + 1023,
+				BlockTicks: -1,
 			},
 		},
 		// A transaction with multiple inputs.  The first input has a
@@ -296,8 +304,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     medianTime + (5 << wire.SequenceLockTimeGranularity) - 1,
-				BlockHeight: prevUtxoHeight + 3,
+				Seconds:    medianTime + (5 << wire.SequenceLockTimeGranularity) - 1,
+				BlockTicks: heightLock(prevUtxoHeight + 3),
 			},
 		},
 		// Transaction with a single input.  The input's sequence number
@@ -314,8 +322,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     -1,
-				BlockHeight: prevUtxoHeight + 2,
+				Seconds:    -1,
+				BlockTicks: heightLock(prevUtxoHeight + 2),
 			},
 		},
 		// The same input in a transaction whose version is negative as
@@ -331,8 +339,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     -1,
-				BlockHeight: prevUtxoHeight + 2,
+				Seconds:    -1,
+				BlockTicks: heightLock(prevUtxoHeight + 2),
 			},
 		},
 		// A transaction of version zero has sequence locks disabled.
@@ -346,8 +354,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     -1,
-				BlockHeight: -1,
+				Seconds:    -1,
+				BlockTicks: -1,
 			},
 		},
 		// A transaction with two inputs with lock times expressed in
@@ -366,8 +374,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     medianTime + (10 << wire.SequenceLockTimeGranularity) - 1,
-				BlockHeight: -1,
+				Seconds:    medianTime + (10 << wire.SequenceLockTimeGranularity) - 1,
+				BlockTicks: -1,
 			},
 		},
 		// A transaction with two inputs with lock times expressed in
@@ -387,8 +395,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     -1,
-				BlockHeight: prevUtxoHeight + 10,
+				Seconds:    -1,
+				BlockTicks: heightLock(prevUtxoHeight + 10),
 			},
 		},
 		// A transaction with multiple inputs.  Two inputs are time
@@ -413,8 +421,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			},
 			view: utxoView,
 			want: &SequenceLock{
-				Seconds:     medianTime + (13 << wire.SequenceLockTimeGranularity) - 1,
-				BlockHeight: prevUtxoHeight + 8,
+				Seconds:    medianTime + (13 << wire.SequenceLockTimeGranularity) - 1,
+				BlockTicks: heightLock(prevUtxoHeight + 8),
 			},
 		},
 		// A transaction with a single unconfirmed input.  As the input
@@ -434,8 +442,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			view:    utxoView,
 			mempool: true,
 			want: &SequenceLock{
-				Seconds:     -1,
-				BlockHeight: nextBlockHeight + 1,
+				Seconds:    -1,
+				BlockTicks: heightLock(nextBlockHeight + 1),
 			},
 		},
 		// A transaction with a single unconfirmed input.  The input has
@@ -452,8 +460,8 @@ func TestCalcSequenceLock(t *testing.T) {
 			view:    utxoView,
 			mempool: true,
 			want: &SequenceLock{
-				Seconds:     nextMedianTime + 1023,
-				BlockHeight: -1,
+				Seconds:    nextMedianTime + 1023,
+				BlockTicks: -1,
 			},
 		},
 	}
@@ -470,9 +478,9 @@ func TestCalcSequenceLock(t *testing.T) {
 			t.Fatalf("test #%d got %v seconds want %v seconds",
 				i, seqLock.Seconds, test.want.Seconds)
 		}
-		if seqLock.BlockHeight != test.want.BlockHeight {
-			t.Fatalf("test #%d got height of %v want height of %v ",
-				i, seqLock.BlockHeight, test.want.BlockHeight)
+		if seqLock.BlockTicks != test.want.BlockTicks {
+			t.Fatalf("test #%d got ticks of %v want ticks of %v ",
+				i, seqLock.BlockTicks, test.want.BlockTicks)
 		}
 	}
 }
@@ -518,9 +526,9 @@ func TestNextBlockSequenceLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to calc sequence lock: %v", err)
 	}
-	if lock.Seconds != wantSeconds || lock.BlockHeight != -1 {
-		t.Fatalf("got %d seconds and height %d, want %d seconds and "+
-			"height -1", lock.Seconds, lock.BlockHeight, wantSeconds)
+	if lock.Seconds != wantSeconds || lock.BlockTicks != -1 {
+		t.Fatalf("got %d seconds and ticks %d, want %d seconds and "+
+			"ticks -1", lock.Seconds, lock.BlockTicks, wantSeconds)
 	}
 }
 
@@ -1091,5 +1099,44 @@ func TestIsInitialBlockDownload(t *testing.T) {
 	if chain.IsInitialBlockDownload() {
 		t.Fatal("a chain that has been current went back into initial " +
 			"block download")
+	}
+}
+
+// TestUpgrade2027ActivationTimeOverride ensures the chain uses the network's
+// activation time of the 1-minute block upgrade unless the configuration
+// overrides it, and that an override of 0 is kept.
+func TestUpgrade2027ActivationTimeOverride(t *testing.T) {
+	zero, past := uint64(0), uint64(1605451779)
+	tests := []struct {
+		override *uint64
+		want     uint64
+	}{
+		{nil, chaincfg.RegressionNetParams.Upgrade2027ActivationTime},
+		{&zero, 0},
+		{&past, 1605451779},
+	}
+	for i, test := range tests {
+		db, err := database.Create(testDbType,
+			filepath.Join(t.TempDir(), "db"), blockDataNet)
+		if err != nil {
+			t.Fatalf("create db: %v", err)
+		}
+		params := chaincfg.RegressionNetParams
+		chain, err := New(&Config{
+			DB:                        db,
+			ChainParams:               &params,
+			TimeSource:                NewMedianTime(),
+			ExcessiveBlockSize:        32000000,
+			Upgrade2027ActivationTime: test.override,
+		})
+		if err != nil {
+			db.Close()
+			t.Fatalf("test %d: New: %v", i, err)
+		}
+		if got := chain.Upgrade2027ActivationTime(); got != test.want {
+			t.Errorf("test %d: activation time %d, want %d", i, got,
+				test.want)
+		}
+		db.Close()
 	}
 }

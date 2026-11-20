@@ -120,7 +120,10 @@ func makeTestOutput(r *rpctest.Harness, t *testing.T,
 func TestBIP0113Activation(t *testing.T) {
 	t.Parallel()
 
-	bchdCfg := []string{"--rejectnonstd"}
+	// The deployment windows are counted in blocks of a chain of about 100
+	// blocks, so the test keeps 10-minute blocks whatever the default.
+	bchdCfg := []string{"--rejectnonstd",
+		rpctest.Upgrade2027Arg(rpctest.Upgrade2027Never)}
 	r, err := rpctest.New(&chaincfg.SimNetParams, nil, bchdCfg)
 	if err != nil {
 		t.Fatal("unable to create primary harness: ", err)
@@ -432,7 +435,10 @@ func TestBIP0068AndBIP0112Activation(t *testing.T) {
 	// (sequence locks) and BIP 112 rule-sets which add input-age based
 	// relative lock times.
 
-	bchdCfg := []string{"--rejectnonstd"}
+	// The deployment windows are counted in blocks of a chain of about 100
+	// blocks, so the test keeps 10-minute blocks whatever the default.
+	bchdCfg := []string{"--rejectnonstd",
+		rpctest.Upgrade2027Arg(rpctest.Upgrade2027Never)}
 	r, err := rpctest.New(&chaincfg.SimNetParams, nil, bchdCfg)
 	if err != nil {
 		t.Fatal("unable to create primary harness: ", err)

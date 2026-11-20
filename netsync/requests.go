@@ -5,9 +5,11 @@
 package netsync
 
 import (
+	"math"
 	"slices"
 	"time"
 
+	"github.com/gcash/bchd/blockchain"
 	"github.com/gcash/bchd/chaincfg/chainhash"
 	peerpkg "github.com/gcash/bchd/peer"
 	"github.com/gcash/bchd/wire"
@@ -87,6 +89,7 @@ func newPeerSyncState(syncCandidate bool) *peerSyncState {
 		requestedTxns:   make(map[chainhash.Hash]struct{}),
 		announcedTxns:   make(map[chainhash.Hash]struct{}),
 		requestedBlocks: make(map[chainhash.Hash]struct{}),
+		blocksInFlight:  make(map[chainhash.Hash]struct{}),
 	}
 }
 
@@ -213,10 +216,10 @@ func (sm *SyncManager) requestBlock(peer *peerpkg.Peer, state *peerSyncState,
 		}
 		sm.endBlockRequest(hash)
 	}
-	if state.blocksInFlight == 0 {
+	if len(state.blocksInFlight) == 0 {
 		state.downloadingSince = sm.now()
 	}
-	state.blocksInFlight++
+	state.blocksInFlight[*hash] = struct{}{}
 	if validHeader {
 		state.validBlocksInFlight++
 		sm.validBlockRequests[*hash] = struct{}{}
@@ -244,8 +247,8 @@ func (sm *SyncManager) endBlockRequest(hash *chainhash.Hash) {
 	if valid && state.validBlocksInFlight > 0 {
 		state.validBlocksInFlight--
 	}
-	if state.blocksInFlight > 0 {
-		state.blocksInFlight--
+	if _, ok := state.blocksInFlight[*hash]; ok {
+		delete(state.blocksInFlight, *hash)
 		state.downloadingSince = sm.now()
 	}
 }
@@ -297,12 +300,33 @@ func (sm *SyncManager) retryBlockRequest(hash *chainhash.Hash,
 }
 
 // blockTimeout returns how long a peer may go without delivering a block it
-// was asked for while the passed number of other peers are asked for blocks
-// whose headers were validated: as in BCHN, a block interval, and half of one
-// more for each of them.  Only blocks with validated headers count, so that
-// peers announcing blocks that do not exist cannot stretch the timeout.
-func (sm *SyncManager) blockTimeout(others int) time.Duration {
-	return sm.chainParams.TargetTimePerBlock * time.Duration(2+others) / 2
+// was asked for, with the passed target interval, while the passed number of
+// other peers are asked for blocks whose headers were validated: the interval,
+// and half of it more for each of them.  Only blocks with validated headers
+// count, so that peers announcing blocks that do not exist cannot stretch the
+// timeout.
+func blockTimeout(interval time.Duration, others int) time.Duration {
+	return interval * time.Duration(2+others) / 2
+}
+
+// inFlightInterval returns the target interval of the oldest block still
+// waited for from the peer, the one with the fewest ticks.  Blocks whose
+// headers are unknown were requested from announcements, so when the peer is
+// asked for no other block they are taken for the block after the tip.
+func (sm *SyncManager) inFlightInterval(peer *peerpkg.Peer,
+	state *peerSyncState) time.Duration {
+
+	oldest := blockchain.BlockTicks{Ticks: math.MaxInt64}
+	for hash := range state.blocksInFlight {
+		ticks, err := sm.chain.BlockTicksByHash(&hash)
+		if err == nil && ticks.Ticks < oldest.Ticks {
+			oldest = ticks
+		}
+	}
+	if oldest.Interval == 0 {
+		oldest.Interval = sm.chain.BestSnapshot().NextBlockInterval
+	}
+	return time.Duration(oldest.Interval) * time.Second
 }
 
 // handleRequestTimeouts requests the transactions whose requests expired from
@@ -330,14 +354,15 @@ func (sm *SyncManager) handleRequestTimeouts() {
 		}
 	}
 	for peer, state := range sm.peerStates {
-		if state.blocksInFlight == 0 || !peer.Connected() {
+		if len(state.blocksInFlight) == 0 || !peer.Connected() {
 			continue
 		}
 		others := validDownloads
 		if state.validBlocksInFlight > 0 {
 			others--
 		}
-		if now.Sub(state.downloadingSince) > sm.blockTimeout(others) {
+		timeout := blockTimeout(sm.inFlightInterval(peer, state), others)
+		if now.Sub(state.downloadingSince) > timeout {
 			log.Infof("Timeout downloading blocks from peer %s -- "+
 				"disconnecting", peer)
 			peer.Disconnect()

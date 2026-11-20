@@ -49,9 +49,10 @@ func serializeV0Utxo(entry *blockchain.UtxoEntry, outpoint *wire.OutPoint) []byt
 // the Utxo set and calculates the ECMH hash.
 func CalcUtxoSet(db database.DB, height int32, utxoWriter io.Writer) (*chainhash.Hash, int, error) {
 	chain, err := blockchain.New(&blockchain.Config{
-		DB:          db,
-		ChainParams: activeNetParams,
-		TimeSource:  blockchain.NewMedianTime(),
+		DB:                       db,
+		ChainParams:              activeNetParams,
+		TimeSource:               blockchain.NewMedianTime(),
+		UseStoredUpgrade2027Time: true,
 		// No nice way to get the main configuration here.
 		// For now just accept up to the default.
 		ExcessiveBlockSize: 32000000 * 4, // TODO TODO, is it needed to do that here really?

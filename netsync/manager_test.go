@@ -89,10 +89,9 @@ func (ctx *testContext) Setup(config *testConfig) error {
 			MaxOrphanTxSize: 100,
 			MaxOrphanTxs:    1,
 		},
-		ChainParams:    ctx.cfg.chainParams,
-		FetchUtxoView:  chain.FetchUtxoView,
-		BestHeight:     func() int32 { return chain.BestSnapshot().Height },
-		MedianTimePast: func() time.Time { return chain.BestSnapshot().MedianTime },
+		ChainParams:   ctx.cfg.chainParams,
+		FetchUtxoView: chain.FetchUtxoView,
+		BestSnapshot:  chain.BestSnapshot,
 		CalcSequenceLock: func(tx *bchutil.Tx, view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 			return chain.CalcSequenceLock(tx, view, true)
 		},

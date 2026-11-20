@@ -6,6 +6,7 @@ package netsync
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -336,6 +337,18 @@ func TestBlockMisbehavior(t *testing.T) {
 	expectRejected("high hash", highHashBlock, wire.RejectInvalid,
 		"high-hash", 50)
 
+	// A wrong target gets 100, one above the limit 50, as for a header.
+	wrongBits := rebuild(mineBlock(t, params, a1.MsgBlock(), 2, 4),
+		func(msg *wire.MsgBlock) { msg.Header.Bits = 0x1f7fffff })
+	send(wrongBits, true, false)
+	expectRejected("wrong difficulty", wrongBits, wire.RejectInvalid,
+		"bad-diffbits", 100)
+	aboveLimit := rebuild(mineBlock(t, params, a1.MsgBlock(), 2, 5),
+		func(msg *wire.MsgBlock) { msg.Header.Bits = 0x2100ffff })
+	send(aboveLimit, true, false)
+	expectRejected("target above the limit", aboveLimit,
+		wire.RejectInvalid, "high-hash", 50)
+
 	// An old version is refused with no score.
 	a2 := mineBlock(t, params, a1.MsgBlock(), 2, 2)
 	send(a2, true, false)
@@ -385,6 +398,109 @@ func TestBlockMisbehavior(t *testing.T) {
 	}
 }
 
+// TestBlockBanScoreDifficulty ensures a block that failed with
+// ErrUnexpectedDifficulty gets 100 when it meets its in-range target and 50
+// when the target is out of range.  A chain with fewer ticks than the
+// CHIP-2025-03 ASERT anchor fails with that code and an in-range target, so it
+// gets 100 too.
+func TestBlockBanScoreDifficulty(t *testing.T) {
+	powLimit := chaincfg.RegressionNetParams.PowLimit
+	tests := []struct {
+		name  string
+		bits  uint32
+		score uint32
+	}{
+		{"in range", 0x207fffff, 100},
+		{"above the limit", 0x2100ffff, 50},
+		{"zero", 0, 50},
+	}
+	for _, test := range tests {
+		block := &wire.MsgBlock{Header: wire.BlockHeader{Bits: test.bits}}
+		if test.score == 100 {
+			solveBlock(block)
+		}
+		header := &block.Header
+		for _, extendsTip := range []bool{false, true} {
+			score := blockBanScore(blockchain.ErrUnexpectedDifficulty,
+				header, powLimit, extendsTip)
+			if score != test.score {
+				t.Errorf("%s (extends tip %v): got score %d, "+
+					"want %d", test.name, extendsTip, score,
+					test.score)
+			}
+		}
+	}
+}
+
+// TestCoinbaseShapeMisbehavior ensures the peer that sent a block whose
+// coinbase has the shape CHIP-2025-03 forbids gets a ban score of 100 with the
+// reason bad-cb-shape from the block after the upgrade 2027 activation block,
+// and none while the upgrade never activates.
+func TestCoinbaseShapeMisbehavior(t *testing.T) {
+	// send has the peer send the block it was asked for.
+	send := func(h *requestTestHarness, peer *peerpkg.Peer,
+		block *bchutil.Block) {
+
+		h.sm.requestBlock(peer, h.sm.peerStates[peer], block.Hash(), true)
+		h.sm.handleBlockMsg(&blockMsg{block: block, peer: peer})
+	}
+	// expectTip fails the test unless the block is the tip and no score
+	// was asked for.
+	expectTip := func(what string, h *requestTestHarness,
+		block *bchutil.Block) {
+
+		t.Helper()
+		if got := h.scores(); len(got) != 0 {
+			t.Errorf("%s: punished %v, want none", what, got)
+		}
+		if tip := h.sm.chain.BestSnapshot().Hash; tip != *block.Hash() {
+			t.Errorf("%s: tip is %v, want %v", what, tip, block.Hash())
+		}
+	}
+
+	// The coinbases of the test blocks have version 1, lock time 0, a
+	// final sequence and pay 50 BCH.
+	never := newRequestTestHarness(t)
+	block := never.tipBlock(0)
+	send(never, never.peer(1), block)
+	expectTip("never active", never, block)
+
+	// The harness tip, block 1, is the activation block, whose coinbase
+	// may still have the shape.
+	activation := uint64(chaincfg.RegressionNetParams.GenesisBlock.Header.
+		Timestamp.Unix()) + 1
+	h := newUpgradeRequestTestHarness(t, activation)
+	best := h.sm.chain.BestSnapshot()
+	if best.Height != 1 || best.NextBlockInterval != 60 {
+		t.Fatalf("tip at height %d has next interval %d, want the "+
+			"activation block at height 1", best.Height,
+			best.NextBlockInterval)
+	}
+	peer := h.peer(1)
+	forbidden := h.tipBlock(0)
+	send(h, peer, forbidden)
+	if got, want := h.scores(), []string{"100 bad-cb-shape"}; !slices.Equal(got, want) {
+		t.Fatalf("forbidden shape: punished %v, want %v", got, want)
+	}
+	h.mtx.Lock()
+	h.punished = nil
+	h.mtx.Unlock()
+
+	// A version 2 coinbase paying the 1-minute subsidy is accepted.
+	msg := h.tipBlock(1).MsgBlock()
+	cb := msg.Transactions[0]
+	cb.Version = 2
+	cb.TxOut[0].Value = blockchain.CalcBlockSubsidy(best.Ticks+60, 60,
+		h.params)
+	merkles := blockchain.BuildMerkleTreeStore(
+		bchutil.NewBlock(msg).Transactions())
+	msg.Header.MerkleRoot = *merkles[len(merkles)-1]
+	solveBlock(msg)
+	allowed := bchutil.NewBlock(msg)
+	send(h, peer, allowed)
+	expectTip("version 2 coinbase", h, allowed)
+}
+
 // cutReason returns reason cut to the 111 bytes a reject carries.
 func cutReason(reason string) string {
 	if len(reason) > 111 {
@@ -411,13 +527,12 @@ func fundedPool(params *chaincfg.Params, funding *wire.MsgTx,
 			view.AddTxOuts(fundingTx, 1)
 			return view, nil
 		},
-		BestHeight:     func() int32 { return 1000 },
-		MedianTimePast: time.Now,
+		BestSnapshot: testBestState(1000),
 		CalcSequenceLock: func(*bchutil.Tx,
 			*blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 
 			return &blockchain.SequenceLock{Seconds: -1,
-				BlockHeight: -1}, nil
+				BlockTicks: -1}, nil
 		},
 	})
 }

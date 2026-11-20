@@ -69,14 +69,10 @@ type Config struct {
 	// FetchUtxoView is used.
 	FetchUtxoEntryUncached func(wire.OutPoint) (*blockchain.UtxoEntry, error)
 
-	// BestHeight defines the function to use to access the block height of
-	// the current best chain.
-	BestHeight func() int32
-
-	// MedianTimePast defines the function to use in order to access the
-	// median time past calculated from the point-of-view of the current
-	// chain tip within the best chain.
-	MedianTimePast func() time.Time
+	// BestSnapshot defines the function to use to access the state of the
+	// current best chain tip.  The height, median time past and ticks of
+	// the next block are all read from one snapshot so they agree.
+	BestSnapshot func() *blockchain.BestState
 
 	// CalcSequenceLock defines the function to use in order to generate
 	// the current sequence lock for the given transaction using the passed
@@ -852,13 +848,16 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 			"txn-already-in-mempool", str)
 	}
 
-	medianTimePast := mp.cfg.MedianTimePast()
+	best := mp.cfg.BestSnapshot()
+	medianTimePast := best.MedianTime
 
 	// Get the current height of the main chain.  A standalone transaction
 	// will be mined into the next block at best, so its height is at least
-	// one more than the current height.
-	bestHeight := mp.cfg.BestHeight()
+	// one more than the current height, and its ticks are those of the
+	// next block on the schedule.
+	bestHeight := best.Height
 	nextBlockHeight := bestHeight + 1
+	nextBlockTicks := best.TickSchedule.NextBlockTicks()
 
 	magneticAnomalyActive := false
 	if nextBlockHeight > mp.cfg.ChainParams.MagneticAnonomalyForkHeight {
@@ -895,7 +894,7 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 	// Don't allow non-standard transactions if the network parameters
 	// forbid their acceptance.
 	if !mp.cfg.Policy.AcceptNonStd {
-		err = checkTransactionStandard(tx, nextBlockHeight,
+		err = checkTransactionStandard(tx, nextBlockTicks,
 			medianTimePast, DefaultDustRelayFee,
 			mp.cfg.Policy.MaxTxVersion, upgrade9Active, upgrade12Active)
 		if err != nil {
@@ -915,7 +914,9 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 
 	// Only accept transactions that can be mined in the next block, even
 	// when non-standard transactions are accepted.
-	if !blockchain.IsFinalizedTransaction(tx, nextBlockHeight, medianTimePast) {
+	if !blockchain.IsFinalizedTransaction(tx, nextBlockTicks,
+		medianTimePast, best.Upgrade2027Active) {
+
 		str := fmt.Sprintf("transaction %v is not finalized in the "+
 			"next block (bad-txns-nonfinal)", txHash)
 		return nil, txRuleError(wire.RejectNonstandard,
@@ -1008,7 +1009,7 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 		}
 		return nil, err
 	}
-	if !blockchain.SequenceLockActive(sequenceLock, nextBlockHeight,
+	if !blockchain.SequenceLockActive(sequenceLock, nextBlockTicks,
 		medianTimePast) {
 		return nil, txRuleError(wire.RejectNonstandard,
 			"non-BIP68-final",
@@ -1019,7 +1020,7 @@ func (mp *TxPool) checkMempoolAcceptance(tx *bchutil.Tx, isNew, rejectDupOrphans
 	// rules in blockchain for what transactions are allowed into blocks.
 	// Also returns the fees associated with the transaction which will be
 	// used later.
-	txFee, err := blockchain.CheckTransactionInputs(tx, nextBlockHeight,
+	txFee, err := blockchain.CheckTransactionInputs(tx, best.TickSchedule,
 		utxoView, mp.cfg.ChainParams)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {

@@ -92,6 +92,7 @@ func syncCandidate(t *testing.T, sm *SyncManager, params *chaincfg.Params,
 		syncCandidate:   true,
 		requestedTxns:   make(map[chainhash.Hash]struct{}),
 		requestedBlocks: make(map[chainhash.Hash]struct{}),
+		blocksInFlight:  make(map[chainhash.Hash]struct{}),
 	}
 	return p
 }

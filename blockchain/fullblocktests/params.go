@@ -135,4 +135,8 @@ var regressionNetParams = &chaincfg.Params{
 
 	// For the purpose of this test we don't need to check the Uahf
 	UahfForkHeight: -1,
+
+	// The generated blocks are stamped with the wall clock, so the upgrade
+	// is never active rather than on a date the clock will pass.
+	Upgrade2027ActivationTime: 1<<48 - 1,
 }

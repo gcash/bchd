@@ -1,0 +1,854 @@
+{
+  "description": "BlockTicks tick-mapper golden vectors. `expected` values are hand-derived golden pins; the self-test verifies the reference implementation against them, and the generator refuses to emit unless every pin passes. Schedule semantics: an entry {height, tau} sets the interval for blocks > height; genesis itself contributes 0 ticks and always reports the default interval, but an entry at height 0 is valid and sets block 1's interval. TickToHeight rounds down and saturates at MAX_HEIGHT. HeightToTick saturates at MAX_TICK. All integer values are decimal strings to preserve full 64-bit precision.",
+  "constants": {
+    "BASE_BLOCK_INTERVAL_TIME": "600",
+    "MAX_BLOCK_INTERVAL_TIME": "600",
+    "MIN_BLOCK_INTERVAL_TIME": "1",
+    "MAX_HEIGHT": "30744573456182585",
+    "MAX_TICK": "18446744073709551000"
+  },
+  "schedules": [
+    {
+      "name": "empty",
+      "schedule": [],
+      "queries": [
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "0",
+          "expected": "600",
+          "note": "genesis has the default 600 interval"
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "1",
+          "expected": "600",
+          "note": "first block uses default tau"
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "18446744073709551615",
+          "expected": "600",
+          "note": "default carries to max height"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "18446744073709551615",
+          "expected": "600",
+          "note": "no entries: default carries forward"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "0",
+          "expected": "0",
+          "note": "genesis"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "1",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "10",
+          "expected": "6000",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "0",
+          "expected": "0",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "600",
+          "expected": "1",
+          "note": "exact boundary -> 1 block"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "599",
+          "expected": "0",
+          "note": "rounds down"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "6000",
+          "expected": "10",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "30744573456182585",
+          "expected": "18446744073709551000",
+          "note": "largest representable height"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "18446744073709551000",
+          "expected": "30744573456182585",
+          "note": "exact saturation threshold"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "18446744073709551615",
+          "expected": "30744573456182585",
+          "note": "beyond threshold saturates"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "18446744073709550400",
+          "expected": "30744573456182584",
+          "note": "one block short of saturation"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "18446744073709550999",
+          "expected": "30744573456182584",
+          "note": "top-edge round down"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "30744573456182586",
+          "expected": "18446744073709551000",
+          "note": "height beyond domain saturates"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "18446744073709551615",
+          "expected": "18446744073709551000",
+          "note": "clamp holds for a max-valued height"
+        }
+      ],
+      "roundTrips": []
+    },
+    {
+      "name": "chip_activation",
+      "schedule": [
+        {
+          "height": "1003670",
+          "tau": "60"
+        }
+      ],
+      "queries": [
+        {
+          "op": "HeightToTick",
+          "arg": "0",
+          "expected": "0",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "1",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "1003670",
+          "expected": "602202000",
+          "note": "last 600-tick block, unchanged"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "1003671",
+          "expected": "602202060",
+          "note": "block 1'003'671 adds 60"
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "1003670",
+          "expected": "600",
+          "note": "still 600"
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "1003671",
+          "expected": "60",
+          "note": "now 60"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "1003669",
+          "expected": "600",
+          "note": "next is block 1'003'670"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "1003670",
+          "expected": "60",
+          "note": "next is block 1'003'671"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "602202059",
+          "expected": "1003670",
+          "note": "rounds down across the activation boundary"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "602202060",
+          "expected": "1003671",
+          "note": "first 60-tick block"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "18446744073709551615",
+          "expected": "60",
+          "note": "final segment tau"
+        }
+      ],
+      "roundTrips": [
+        {
+          "height": "1003669",
+          "expectedRoundTrip": "1003669"
+        },
+        {
+          "height": "1003670",
+          "expectedRoundTrip": "1003670"
+        },
+        {
+          "height": "1003671",
+          "expectedRoundTrip": "1003671"
+        }
+      ]
+    },
+    {
+      "name": "height_zero_entry",
+      "schedule": [
+        {
+          "height": "0",
+          "tau": "60"
+        }
+      ],
+      "queries": [
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "0",
+          "expected": "600",
+          "note": "genesis"
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "1",
+          "expected": "60",
+          "note": "block 1 uses 60"
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "2",
+          "expected": "60",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "0",
+          "expected": "0",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "1",
+          "expected": "60",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "10",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "60",
+          "expected": "1",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "600",
+          "expected": "10",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "30744573456182585",
+          "expected": "1844674407370955100",
+          "note": "MAX_HEIGHT with tau=60: computed, not clamped"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "30744573456182586",
+          "expected": "18446744073709551000",
+          "note": "clamp is conservative for tau=60"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "18446744073709551615",
+          "expected": "60",
+          "note": "final segment tau"
+        }
+      ],
+      "roundTrips": []
+    },
+    {
+      "name": "multi_entry",
+      "schedule": [
+        {
+          "height": "50000",
+          "tau": "300"
+        },
+        {
+          "height": "100000",
+          "tau": "600"
+        },
+        {
+          "height": "150000",
+          "tau": "60"
+        },
+        {
+          "height": "200000",
+          "tau": "600"
+        }
+      ],
+      "queries": [
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "0",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "1",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "49999",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "50000",
+          "expected": "600",
+          "note": "entry at 50'000 affects blocks > 50'000"
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "50001",
+          "expected": "300",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "50002",
+          "expected": "300",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "100000",
+          "expected": "300",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "100001",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "101000",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "150000",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "150001",
+          "expected": "60",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "200000",
+          "expected": "60",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "200001",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetBlockIntervalTime",
+          "arg": "18446744073709551615",
+          "expected": "600",
+          "note": "final segment tau"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "0",
+          "expected": "600",
+          "note": "next is block 1"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "49999",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "50000",
+          "expected": "300",
+          "note": "block 50'001"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "50001",
+          "expected": "300",
+          "note": "block 50'002"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "100000",
+          "expected": "600",
+          "note": "block 100'001"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "150000",
+          "expected": "60",
+          "note": "block 150'001"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "200000",
+          "expected": "600",
+          "note": "block 200'001"
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "18446744073709551614",
+          "expected": "600",
+          "note": ""
+        },
+        {
+          "op": "GetNextBlockIntervalTime",
+          "arg": "18446744073709551615",
+          "expected": "600",
+          "note": "final segment carries forward"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "0",
+          "expected": "0",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "49999",
+          "expected": "29999400",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "50000",
+          "expected": "30000000",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "50001",
+          "expected": "30000300",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "70000",
+          "expected": "36000000",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "100000",
+          "expected": "45000000",
+          "note": "end of the 300-tick segment"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "140000",
+          "expected": "69000000",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "150000",
+          "expected": "75000000",
+          "note": "end of the second 600-tick segment"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "170000",
+          "expected": "76200000",
+          "note": ""
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "200000",
+          "expected": "78000000",
+          "note": "end of the 60-tick segment"
+        },
+        {
+          "op": "HeightToTick",
+          "arg": "250000",
+          "expected": "108000000",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "0",
+          "expected": "0",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "29999400",
+          "expected": "49999",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "29999401",
+          "expected": "49999",
+          "note": "rounds down"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "29999999",
+          "expected": "49999",
+          "note": "rounds down"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "30000000",
+          "expected": "50000",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "30000001",
+          "expected": "50000",
+          "note": "rounds down"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "30000299",
+          "expected": "50000",
+          "note": "rounds down"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "30000300",
+          "expected": "50001",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "30000301",
+          "expected": "50001",
+          "note": "rounds down"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "30000599",
+          "expected": "50001",
+          "note": "rounds down"
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "30000600",
+          "expected": "50002",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "36000000",
+          "expected": "70000",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "69000000",
+          "expected": "140000",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "76200000",
+          "expected": "170000",
+          "note": ""
+        },
+        {
+          "op": "TickToHeight",
+          "arg": "108000000",
+          "expected": "250000",
+          "note": ""
+        }
+      ],
+      "roundTrips": [
+        {
+          "height": "0",
+          "expectedRoundTrip": "0"
+        },
+        {
+          "height": "1",
+          "expectedRoundTrip": "1"
+        },
+        {
+          "height": "49999",
+          "expectedRoundTrip": "49999"
+        },
+        {
+          "height": "50000",
+          "expectedRoundTrip": "50000"
+        },
+        {
+          "height": "50001",
+          "expectedRoundTrip": "50001"
+        },
+        {
+          "height": "99999",
+          "expectedRoundTrip": "99999"
+        },
+        {
+          "height": "100000",
+          "expectedRoundTrip": "100000"
+        },
+        {
+          "height": "100001",
+          "expectedRoundTrip": "100001"
+        },
+        {
+          "height": "149999",
+          "expectedRoundTrip": "149999"
+        },
+        {
+          "height": "150000",
+          "expectedRoundTrip": "150000"
+        },
+        {
+          "height": "150001",
+          "expectedRoundTrip": "150001"
+        },
+        {
+          "height": "199999",
+          "expectedRoundTrip": "199999"
+        },
+        {
+          "height": "200000",
+          "expectedRoundTrip": "200000"
+        },
+        {
+          "height": "200001",
+          "expectedRoundTrip": "200001"
+        },
+        {
+          "height": "250000",
+          "expectedRoundTrip": "250000"
+        }
+      ]
+    }
+  ],
+  "validation": [
+    {
+      "name": "tau_zero_rejected",
+      "schedule": [
+        {
+          "height": "10",
+          "tau": "0"
+        }
+      ],
+      "accept": false
+    },
+    {
+      "name": "tau_over_max_rejected",
+      "schedule": [
+        {
+          "height": "10",
+          "tau": "601"
+        }
+      ],
+      "accept": false
+    },
+    {
+      "name": "tau_does_not_divide_rejected",
+      "schedule": [
+        {
+          "height": "10",
+          "tau": "7"
+        }
+      ],
+      "accept": false
+    },
+    {
+      "name": "duplicate_height_rejected",
+      "schedule": [
+        {
+          "height": "10",
+          "tau": "300"
+        },
+        {
+          "height": "10",
+          "tau": "60"
+        }
+      ],
+      "accept": false
+    },
+    {
+      "name": "descending_rejected",
+      "schedule": [
+        {
+          "height": "20",
+          "tau": "300"
+        },
+        {
+          "height": "10",
+          "tau": "60"
+        }
+      ],
+      "accept": false
+    },
+    {
+      "name": "grid_misalignment_rejected",
+      "schedule": [
+        {
+          "height": "0",
+          "tau": "60"
+        },
+        {
+          "height": "9",
+          "tau": "600"
+        }
+      ],
+      "accept": false
+    },
+    {
+      "name": "height_over_max_rejected",
+      "schedule": [
+        {
+          "height": "30744573456182586",
+          "tau": "300"
+        }
+      ],
+      "accept": false
+    },
+    {
+      "name": "uint64_max_rejected",
+      "schedule": [
+        {
+          "height": "18446744073709551615",
+          "tau": "300"
+        }
+      ],
+      "accept": false
+    },
+    {
+      "name": "height_zero_entry_accepted",
+      "schedule": [
+        {
+          "height": "0",
+          "tau": "60"
+        }
+      ],
+      "accept": true
+    },
+    {
+      "name": "valid_multi_entry_accepted",
+      "schedule": [
+        {
+          "height": "100000",
+          "tau": "60"
+        },
+        {
+          "height": "100010",
+          "tau": "600"
+        }
+      ],
+      "accept": true
+    },
+    {
+      "name": "tau_one_accepted",
+      "schedule": [
+        {
+          "height": "10",
+          "tau": "1"
+        }
+      ],
+      "accept": true
+    },
+    {
+      "name": "tau_300_accepted",
+      "schedule": [
+        {
+          "height": "10",
+          "tau": "300"
+        }
+      ],
+      "accept": true
+    },
+    {
+      "name": "tau_base_accepted",
+      "schedule": [
+        {
+          "height": "10",
+          "tau": "600"
+        }
+      ],
+      "accept": true
+    },
+    {
+      "name": "entry_at_max_height_accepted",
+      "schedule": [
+        {
+          "height": "30744573456182585",
+          "tau": "300"
+        }
+      ],
+      "accept": true
+    },
+    {
+      "name": "entry_at_max_height_tau_one_accepted",
+      "schedule": [
+        {
+          "height": "30744573456182585",
+          "tau": "1"
+        }
+      ],
+      "accept": true
+    },
+    {
+      "name": "entry_just_past_max_height_rejected",
+      "schedule": [
+        {
+          "height": "30744573456182586",
+          "tau": "600"
+        }
+      ],
+      "accept": false
+    }
+  ],
+  "validationNote": "Apart from the height-0 entry, every accept row is a conforming schedule and remains meaningful for any implementation. The reject rows document the reference implementation's construction-time checks. The CHIP's schedule constraints bound the schedules for which the dependent mechanisms are specified; performing the checks is encouraged, because they are cheap and fail fast, but an implementation need not do so, and one that accepts a violating schedule voids the guarantees of the mechanisms depending on it rather than defining an invalid consensus state. A consumer SHOULD NOT score a conformant implementation on the reject rows: they are a regression guard for this reference, not a conformance test."
+}

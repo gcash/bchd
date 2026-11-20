@@ -198,7 +198,7 @@ type headerNode struct {
 
 // peerSyncState stores additional information that the SyncManager tracks
 // about a peer.  The peer may send the blocks in requestedBlocks, but only
-// blocksInFlight of them are still waited for from it, since the others
+// those in blocksInFlight are still waited for from it, since the others
 // arrived from other peers, validBlocksInFlight of them with validated
 // headers, and its download timer runs from downloadingSince.  The
 // transactions it announced while another peer was asked for them are in
@@ -209,7 +209,7 @@ type peerSyncState struct {
 	requestedTxns       map[chainhash.Hash]struct{}
 	announcedTxns       map[chainhash.Hash]struct{}
 	requestedBlocks     map[chainhash.Hash]struct{}
-	blocksInFlight      int
+	blocksInFlight      map[chainhash.Hash]struct{}
 	validBlocksInFlight int
 	downloadingSince    time.Time
 
@@ -449,7 +449,7 @@ func (sm *SyncManager) startSync() {
 		sm.validBlockRequests = make(map[chainhash.Hash]struct{})
 		sm.blockAnnouncers = make(map[chainhash.Hash][]*peerpkg.Peer)
 		for _, state := range sm.peerStates {
-			state.blocksInFlight = 0
+			state.blocksInFlight = make(map[chainhash.Hash]struct{})
 			state.validBlocksInFlight = 0
 		}
 
@@ -758,7 +758,7 @@ func (sm *SyncManager) clearRequestedState(peer *peerpkg.Peer,
 		}
 	}
 	state.requestedBlocks = make(map[chainhash.Hash]struct{})
-	state.blocksInFlight = 0
+	state.blocksInFlight = make(map[chainhash.Hash]struct{})
 	state.validBlocksInFlight = 0
 	q.send()
 }
@@ -1029,6 +1029,12 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		code, _ := mempool.ErrToRejectErr(err)
 		reason := mempool.BlockRejectReason(err,
 			bmsg.block.MsgBlock().Header.Version)
+		if rerr.ErrorCode == blockchain.ErrUnexpectedDifficulty {
+			// A target out of range is high-hash, not bad-diffbits.
+			_, reason = HeaderBanScore(rerr.ErrorCode,
+				&bmsg.block.MsgBlock().Header,
+				sm.chainParams.PowLimit)
+		}
 		peer.PushRejectMsg(wire.CmdBlock, code, reason, blockHash, false)
 
 		// Punish the peer for an invalid block it sent in a block
@@ -1037,7 +1043,9 @@ func (sm *SyncManager) handleBlockMsg(bmsg *blockMsg) {
 		// is known: bchd checks some of BCHN's rules for the other blocks
 		// too, or earlier, so it could punish a peer BCHN does not.
 		if requested && parentKnown && !bmsg.compact {
-			score := blockBanScore(rerr.ErrorCode, extendsTip)
+			score := blockBanScore(rerr.ErrorCode,
+				&bmsg.block.MsgBlock().Header,
+				sm.chainParams.PowLimit, extendsTip)
 			if score > 0 {
 				sm.peerNotifier.Misbehaving(peer, score, reason)
 			}
@@ -1493,7 +1501,8 @@ func (sm *SyncManager) handleHeadersMsg(hmsg *headersMsg) {
 // compact block, which cmpct tells, costs the peer nothing when it doesn't
 // connect, and its block is fetched in full if it was requested from the
 // peer, or its chain when that has more work than the tip, as BCHN does
-// (3039-3075, 3115-3129).
+// (3039-3075, 3115-3129).  The headers before one refused only as too far in
+// the future are kept too.
 func (sm *SyncManager) handleHeaders(peer *peerpkg.Peer, state *peerSyncState,
 	headers []*wire.BlockHeader, cmpct bool) {
 
@@ -1543,7 +1552,18 @@ func (sm *SyncManager) handleHeaders(peer *peerpkg.Peer, state *peerSyncState,
 		if score > 0 {
 			sm.peerNotifier.Misbehaving(peer, score, reason)
 		}
-		return
+
+		// A header refused only as too far in the future is otherwise
+		// valid and may be accepted later, so the headers before it are
+		// kept and their blocks fetched, as BCHN does.  When it is the
+		// first, it explains why the peer's headers did not connect.
+		if rerr.ErrorCode != blockchain.ErrTimeTooNew {
+			return
+		}
+		if header == nil {
+			state.unconnectedHeaders = 0
+			return
+		}
 	}
 	state.unconnectedHeaders = 0
 	if state.bestHeader == nil || header.Work.Cmp(state.bestHeader.Work) >= 0 {
@@ -1562,8 +1582,9 @@ func (sm *SyncManager) handleHeaders(peer *peerpkg.Peer, state *peerSyncState,
 		peer.UpdateLastBlockHeight(height)
 	}
 
-	// The peer may have more headers after a full message.
-	if numHeaders == wire.MaxBlockHeadersPerMsg {
+	// The peer may have more headers after a full message of headers that
+	// were all accepted.
+	if numHeaders == wire.MaxBlockHeadersPerMsg && err == nil {
 		locator := blockchain.BlockLocator([]*chainhash.Hash{&header.Hash})
 		_ = peer.PushGetHeadersMsg(locator, &zeroHash)
 	}
@@ -1600,7 +1621,7 @@ func (sm *SyncManager) fetchHeaderChain(peer *peerpkg.Peer, state *peerSyncState
 		header.Height == sm.chain.BestSnapshot().Height+1
 	q := make(getDataQueue)
 	for i := range hashes {
-		if state.blocksInFlight >= maxBlocksInTransitPerPeer {
+		if len(state.blocksInFlight) >= maxBlocksInTransitPerPeer {
 			break
 		}
 		hash := &hashes[i]

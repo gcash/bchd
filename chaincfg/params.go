@@ -172,6 +172,13 @@ type Params struct {
 	ABLAForkHeight                int32  // May 15, 2024 hardfork
 	Upgrade11ActivationTime       uint64 // May 15, 2025 hardfork
 	Upgrade12ActivationTime       uint64 // May 15, 2026 hardfork
+	Upgrade2027ActivationTime     uint64 // May 15, 2027 hardfork
+
+	// CoinbaseShapeExemption defers the forbidden coinbase shape rule of
+	// the 2027 upgrade to fixed heights instead of the block after the
+	// activation block, so miners have time to change their coinbases.
+	// Only mainnet sets it.
+	CoinbaseShapeExemption bool
 
 	// The ABLA algorithm constants
 	ABLAConfig ABLAConstants
@@ -181,12 +188,13 @@ type Params struct {
 	// after.  It matches Bitcoin Cash Node's nDefaultConsensusBlockSize.
 	DefaultConsensusBlockSize uint32
 
-	// CoinbaseMaturity is the number of blocks required before newly mined
-	// coins (coinbase transactions) can be spent.
+	// CoinbaseMaturity is the depth, in 10-minute blocks of 600 ticks,
+	// required before newly mined coins (coinbase transactions) can be
+	// spent.
 	CoinbaseMaturity uint16
 
-	// SubsidyReductionInterval is the interval of blocks before the subsidy
-	// is reduced.
+	// SubsidyReductionInterval is the interval, in 10-minute blocks of 600
+	// ticks, before the subsidy is reduced.
 	SubsidyReductionInterval int32
 
 	// TargetTimespan is the desired amount of time that should elapse
@@ -217,7 +225,9 @@ type Params struct {
 	// MinDiffReductionTime is the amount of time after which the minimum
 	// required difficulty should be reduced when a block hasn't been found.
 	//
-	// NOTE: This only applies if ReduceMinDifficulty is true.
+	// NOTE: This only applies if ReduceMinDifficulty is true, and only to
+	// the difficulty algorithms before ASERT.  ASERT reduces it after twice
+	// the target interval of the new block instead.
 	MinDiffReductionTime time.Duration
 
 	// AsertDifficultyHalflife is the halflife parameter used by the asert
@@ -318,8 +328,10 @@ var MainNetParams = Params{
 	Upgrade9ForkHeight: 792772, // 000000000000000002B678C471841C3E404EC7AE9CA9C32026FE27EB6E3A1ED1
 	ABLAForkHeight:     845890,
 
-	Upgrade11ActivationTime: 1747310400,
-	Upgrade12ActivationTime: 1778846400,
+	Upgrade11ActivationTime:   1747310400,
+	Upgrade12ActivationTime:   1778846400,
+	Upgrade2027ActivationTime: 1810382400,
+	CoinbaseShapeExemption:    true,
 
 	// Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#mainnet
 	ABLAConfig: ABLAConstants{
@@ -524,10 +536,11 @@ var RegressionNetParams = Params{
 
 	CosmicInflationActivationTime: 0, // Always active on regtest
 
-	Upgrade9ForkHeight:      0, // Always active on regtest
-	ABLAForkHeight:          0, // Always active on regtest
-	Upgrade11ActivationTime: 0, // Always active on regtest
-	Upgrade12ActivationTime: 0,
+	Upgrade9ForkHeight:        0, // Always active on regtest
+	ABLAForkHeight:            0, // Always active on regtest
+	Upgrade11ActivationTime:   0, // Always active on regtest
+	Upgrade12ActivationTime:   0,
+	Upgrade2027ActivationTime: 1810382400, // Mainnet time, set an override to activate
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
@@ -637,8 +650,9 @@ var TestNet3Params = Params{
 	Upgrade9ForkHeight: 1552787,
 	ABLAForkHeight:     1605520,
 
-	Upgrade11ActivationTime: 1747310400,
-	Upgrade12ActivationTime: 1778846400,
+	Upgrade11ActivationTime:   1747310400,
+	Upgrade12ActivationTime:   1778846400,
+	Upgrade2027ActivationTime: 1810382400,
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,
@@ -781,8 +795,9 @@ var ChipNetParams = Params{
 	Upgrade9ForkHeight: 121956,
 	ABLAForkHeight:     174519,
 
-	Upgrade11ActivationTime: 1731672000,
-	Upgrade12ActivationTime: 1763208000,
+	Upgrade11ActivationTime:   1731672000,
+	Upgrade12ActivationTime:   1763208000,
+	Upgrade2027ActivationTime: 1794744000,
 
 	//	Reference for the following constant values: https://gitlab.com/0353F40E/ebaa/-/blob/main/README.md#testnets
 	ABLAConfig: ABLAConstants{
@@ -918,8 +933,9 @@ var TestNet4Params = Params{
 	Upgrade9ForkHeight: 148043,
 	ABLAForkHeight:     200740,
 
-	Upgrade11ActivationTime: 1747310400,
-	Upgrade12ActivationTime: 1778846400,
+	Upgrade11ActivationTime:   1747310400,
+	Upgrade12ActivationTime:   1778846400,
+	Upgrade2027ActivationTime: 1810382400,
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        1000000,
@@ -1055,10 +1071,11 @@ var SimNetParams = Params{
 	AsertDifficultyAnchorBits:            simNetGenesisBlock.Header.Bits,
 	GenerateSupported:                    true,
 
-	Upgrade9ForkHeight:      100000000,
-	ABLAForkHeight:          100000000,
-	Upgrade11ActivationTime: 0, // Always active on simnet
-	Upgrade12ActivationTime: 0,
+	Upgrade9ForkHeight:        100000000,
+	ABLAForkHeight:            100000000,
+	Upgrade11ActivationTime:   0, // Always active on simnet
+	Upgrade12ActivationTime:   0,
+	Upgrade2027ActivationTime: 1810382400, // Mainnet time, set an override to activate
 
 	ABLAConfig: ABLAConstants{
 		Epsilon0:        16000000,

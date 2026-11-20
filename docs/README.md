@@ -99,10 +99,11 @@ templates.
 
 At any time, a block that a peer sends without being asked for it is only
 stored if its chain has at least as much work as the current tip and the
-minimum chain work, and it is at most 288 blocks ahead of the tip. Once synced,
-bchd answers a peer that announces a block by asking for the headers leading to
-it, as Bitcoin Cash Node does, and only downloads the blocks once their chain
-has at least as much work as the tip.
+minimum chain work, and it is at most two days of blocks ahead of the tip: 288
+10-minute blocks, or 2,880 1-minute blocks after the May 2027 upgrade. Once
+synced, bchd answers a peer that announces a block by asking for the headers
+leading to it, as Bitcoin Cash Node does, and only downloads the blocks once
+their chain has at least as much work as the tip.
 
 To check every block in full, start bchd with `--nocheckpoints`; this also
 ignores `--addcheckpoint`, which adds a checkpoint of your own. With
@@ -118,7 +119,9 @@ checkpoints up to that block. `--fastsync` can't be combined with
 Finalization stops the node from following a very deep reorganization of the
 chain. Once a main chain block is 10 blocks deep and the node has known it for
 two hours (the defaults), the block is finalized: the node rejects any block
-that forks the chain below it.
+that forks the chain below it. The depth counts 10-minute blocks, so after the
+upgrade to 1-minute blocks (May 2027 on mainnet) a block is finalized 100
+blocks deep.
 
 Nothing is finalized until the node has been running for the finalization
 delay, two hours by default, and blocks loaded from disk at startup count as

@@ -40,8 +40,12 @@ func mineBlock(t *testing.T, params *chaincfg.Params, prev *wire.MsgBlock,
 		Sequence:        wire.MaxTxInSequenceNum,
 		SignatureScript: cbScript,
 	})
-	cb.AddTxOut(wire.NewTxOut(blockchain.CalcBlockSubsidy(height, params),
-		[]byte{txscript.OP_TRUE}, wire.TokenData{}))
+	// The subsidy is that of a 600-tick block.  A block after an activation
+	// block, as the upgrade harness mines, overpays and has the forbidden
+	// coinbase shape, which is checked first.
+	subsidy := blockchain.CalcBlockSubsidy(int64(height)*600, 600, params)
+	cb.AddTxOut(wire.NewTxOut(subsidy, []byte{txscript.OP_TRUE},
+		wire.TokenData{}))
 	pad := append([]byte{txscript.OP_RETURN, txscript.OP_DATA_60},
 		make([]byte, 60)...)
 	cb.AddTxOut(wire.NewTxOut(0, pad, wire.TokenData{}))
@@ -113,6 +117,7 @@ func TestForkBeforeFinalizedDisconnects(t *testing.T) {
 	state := &peerSyncState{
 		requestedTxns:   make(map[chainhash.Hash]struct{}),
 		requestedBlocks: make(map[chainhash.Hash]struct{}),
+		blocksInFlight:  make(map[chainhash.Hash]struct{}),
 	}
 	sm.peerStates[peer] = state
 

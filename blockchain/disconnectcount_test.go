@@ -63,7 +63,7 @@ func TestDisconnectCount(t *testing.T) {
 	blocks := []*bchutil.Block{bchutil.NewBlock(params.GenesisBlock)}
 	for h := int32(1); h <= 5; h++ {
 		block := procTestBlock(t, blocks[h-1].MsgBlock(), h-1,
-			CalcBlockSubsidy(h, &params), params.PowLimitBits, nil)
+			legacySubsidy(h, &params), params.PowLimitBits, nil)
 		if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 			t.Fatalf("block %d: %v", h, err)
 		}
@@ -85,7 +85,7 @@ func TestDisconnectCount(t *testing.T) {
 
 	// A block replacing them is connected without being counted.
 	block := procTestBlock(t, blocks[3].MsgBlock(), 3,
-		CalcBlockSubsidy(4, &params)-1, params.PowLimitBits, nil)
+		legacySubsidy(4, &params)-1, params.PowLimitBits, nil)
 	if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 		t.Fatal(err)
 	}

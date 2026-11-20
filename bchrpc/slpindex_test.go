@@ -651,10 +651,9 @@ func TestSlpBlockEventPoolDeadlock(t *testing.T) {
 	t.Cleanup(stop)
 	poolWaits := make(chan struct{})
 	s.txMemPool = mempool.New(&mempool.Config{
-		Policy:         mempool.Policy{AcceptNonStd: true, MaxTxVersion: 2},
-		ChainParams:    &chaincfg.RegressionNetParams,
-		BestHeight:     func() int32 { return 1 },
-		MedianTimePast: time.Now,
+		Policy:       mempool.Policy{AcceptNonStd: true, MaxTxVersion: 2},
+		ChainParams:  &chaincfg.RegressionNetParams,
+		BestSnapshot: testBestState(1),
 		FetchUtxoView: func(*bchutil.Tx) (*blockchain.UtxoViewpoint, error) {
 			close(poolWaits)
 			select {
@@ -1071,10 +1070,9 @@ func newOpTruePool(t *testing.T) (*mempool.TxPool, *wire.MsgTx) {
 			}
 			return view, nil
 		},
-		BestHeight:     func() int32 { return 1000 },
-		MedianTimePast: time.Now,
+		BestSnapshot: testBestState(1000),
 		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
-			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+			return &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}, nil
 		},
 	})
 	return pool, funding

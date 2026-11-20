@@ -61,7 +61,7 @@ func TestChainChangeDuringNotification(t *testing.T) {
 		chain, blocks := finalizationTestChain(t, -1, time.Hour)
 		params := chain.chainParams
 		block := procTestBlock(t, blocks[5].MsgBlock(), 5,
-			CalcBlockSubsidy(6, params), params.PowLimitBits, nil)
+			legacySubsidy(6, params), params.PowLimitBits, nil)
 		changeDuringNotification(t, chain, block, NTBlockConnected, block, func() error {
 			return chain.InvalidateBlock(blocks[5].Hash())
 		})
@@ -74,7 +74,7 @@ func TestChainChangeDuringNotification(t *testing.T) {
 		chain, blocks := finalizationTestChain(t, -1, time.Hour)
 		params := chain.chainParams
 		block := procTestBlock(t, blocks[5].MsgBlock(), 5,
-			CalcBlockSubsidy(6, params), params.PowLimitBits, nil)
+			legacySubsidy(6, params), params.PowLimitBits, nil)
 		changeDuringNotification(t, chain, block, NTBlockAccepted, block, func() error {
 			return chain.InvalidateBlock(blocks[5].Hash())
 		})
@@ -90,7 +90,7 @@ func TestChainChangeDuringNotification(t *testing.T) {
 			t.Fatal(err)
 		}
 		block := procTestBlock(t, blocks[4].MsgBlock(), 4,
-			CalcBlockSubsidy(5, params)-1, params.PowLimitBits, nil)
+			legacySubsidy(5, params)-1, params.PowLimitBits, nil)
 		changeDuringNotification(t, chain, block, NTBlockConnected, block, func() error {
 			return chain.ReconsiderBlock(blocks[5].Hash())
 		})
@@ -108,14 +108,14 @@ func TestChainChangeDuringNotification(t *testing.T) {
 		prev := blocks[2]
 		for h := int32(3); h <= 4; h++ {
 			block := procTestBlock(t, prev.MsgBlock(), h-1,
-				CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+				legacySubsidy(h, params)-1, params.PowLimitBits, nil)
 			if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 				t.Fatalf("side chain block %d: %v", h, err)
 			}
 			prev = block
 		}
 		block := procTestBlock(t, blocks[5].MsgBlock(), 5,
-			CalcBlockSubsidy(6, params), params.PowLimitBits, nil)
+			legacySubsidy(6, params), params.PowLimitBits, nil)
 		changeDuringNotification(t, chain, block, NTBlockConnected, block, func() error {
 			return chain.FinalizeBlock(prev.Hash())
 		})
@@ -136,14 +136,14 @@ func TestChainChangeDuringNotification(t *testing.T) {
 		prev := blocks[3]
 		for h := int32(4); h <= 5; h++ {
 			block := procTestBlock(t, prev.MsgBlock(), h-1,
-				CalcBlockSubsidy(h, params)-1, params.PowLimitBits, nil)
+				legacySubsidy(h, params)-1, params.PowLimitBits, nil)
 			if _, _, err := chain.ProcessBlock(block, BFNone); err != nil {
 				t.Fatalf("side chain block %d: %v", h, err)
 			}
 			prev = block
 		}
 		block := procTestBlock(t, prev.MsgBlock(), 5,
-			CalcBlockSubsidy(6, params)-1, params.PowLimitBits, nil)
+			legacySubsidy(6, params)-1, params.PowLimitBits, nil)
 		changeDuringNotification(t, chain, block, NTBlockDisconnected, blocks[5], func() error {
 			return chain.FinalizeBlock(blocks[4].Hash())
 		})

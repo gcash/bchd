@@ -38,10 +38,9 @@ func TestBlockConnectedExpiresMempool(t *testing.T) {
 			view.AddTxOut(fund, 0, 1)
 			return view, nil
 		},
-		BestHeight:     func() int32 { return 1000 },
-		MedianTimePast: func() time.Time { return time.Now() },
+		BestSnapshot: testBestState(1000),
 		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
-			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+			return &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}, nil
 		},
 		IsDeploymentActive: func(uint32) (bool, error) { return true, nil },
 	})

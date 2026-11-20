@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/gcash/bchd/blockchain"
@@ -90,12 +89,11 @@ func newMempoolWithTxOuts(t *testing.T,
 			view.AddTxOuts(fundingTx, 1)
 			return view, nil
 		},
-		BestHeight:     func() int32 { return 1 },
-		MedianTimePast: time.Now,
+		BestSnapshot: testBestState(1),
 		CalcSequenceLock: func(*bchutil.Tx,
 			*blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 
-			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+			return &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}, nil
 		},
 	})
 

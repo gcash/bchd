@@ -57,10 +57,23 @@ func (m *ruleTestMiner) coinbase(height int32) *wire.MsgTx {
 			0, 0, txscript.OP_TRUE},
 		Sequence: 0xffffffff,
 	})
-	cb.AddTxOut(wire.NewTxOut(CalcBlockSubsidy(height, m.chain.chainParams),
-		[]byte{txscript.OP_TRUE}, wire.TokenData{}))
+	cb.AddTxOut(wire.NewTxOut(m.subsidy(height), []byte{txscript.OP_TRUE},
+		wire.TokenData{}))
 	cb.AddTxOut(ruleTestPadding(0))
 	return cb
+}
+
+// subsidy returns the subsidy of the block at the passed height, on the tick
+// schedule of the miner's tip when the block extends it.
+func (m *ruleTestMiner) subsidy(height int32) int64 {
+	hash := m.tip.BlockHash()
+	parent := m.chain.index.LookupNode(&hash)
+	if parent == nil || parent.height+1 != height {
+		return legacySubsidy(height, m.chain.chainParams)
+	}
+	interval := int64(parent.nextInterval)
+	return CalcBlockSubsidy(parent.ticks+interval, interval,
+		m.chain.chainParams)
 }
 
 // solve recomputes the merkle root of the block and finds a nonce for it.

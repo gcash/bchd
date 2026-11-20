@@ -39,6 +39,11 @@ type fakeChain struct {
 	utxos          *blockchain.UtxoViewpoint
 	currentHeight  int32
 	medianTimePast time.Time
+
+	// upgrade2027Height is the height of the last 600-tick block when
+	// upgrade2027Active is set.
+	upgrade2027Height int32
+	upgrade2027Active bool
 }
 
 // FetchUtxoView loads utxo details about the inputs referenced by the passed
@@ -81,6 +86,32 @@ func (s *fakeChain) BestHeight() int32 {
 	return height
 }
 
+// BestSnapshot returns the state of the fake chain's tip.
+func (s *fakeChain) BestSnapshot() *blockchain.BestState {
+	s.RLock()
+	defer s.RUnlock()
+	active := s.upgrade2027Active && s.currentHeight >= s.upgrade2027Height
+	sched := blockchain.NewTickSchedule(s.currentHeight+1,
+		s.upgrade2027Height, active)
+	return &blockchain.BestState{
+		Height:            s.currentHeight,
+		MedianTime:        s.medianTimePast,
+		Ticks:             sched.HeightToTicks(s.currentHeight),
+		NextBlockInterval: sched.NextBlockInterval(s.currentHeight),
+		Upgrade2027Active: active,
+		TickSchedule:      sched,
+	}
+}
+
+// SetUpgrade2027Height makes the block at the passed height the fake chain's
+// last 600-tick block.
+func (s *fakeChain) SetUpgrade2027Height(height int32) {
+	s.Lock()
+	s.upgrade2027Height = height
+	s.upgrade2027Active = true
+	s.Unlock()
+}
+
 // SetHeight sets the current height associated with the fake chain instance.
 func (s *fakeChain) SetHeight(height int32) {
 	s.Lock()
@@ -111,9 +142,39 @@ func (s *fakeChain) CalcSequenceLock(_ *bchutil.Tx,
 	_ *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 
 	return &blockchain.SequenceLock{
-		Seconds:     -1,
-		BlockHeight: -1,
+		Seconds:    -1,
+		BlockTicks: -1,
 	}, nil
+}
+
+// heightSequenceLock computes the height-based relative locks of the passed
+// transaction as the chain does for the block after the tip, mapping the
+// heights of its coins to ticks through the tip's schedule.
+func (s *fakeChain) heightSequenceLock(tx *bchutil.Tx,
+	view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
+
+	sched := s.BestSnapshot().TickSchedule
+	lock := &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}
+	if tx.MsgTx().Version < 2 {
+		return lock, nil
+	}
+	for _, txIn := range tx.MsgTx().TxIn {
+		seq := txIn.Sequence
+		if seq&(wire.SequenceLockTimeDisabled|
+			wire.SequenceLockTimeIsSeconds) != 0 {
+
+			continue
+		}
+		entry := view.LookupEntry(txIn.PreviousOutPoint)
+		if entry == nil {
+			return nil, fmt.Errorf("missing input %v",
+				txIn.PreviousOutPoint)
+		}
+		ticks := sched.CoinTicks(entry.BlockHeight()) +
+			int64(seq&wire.SequenceLockTimeMask)*600 - 1
+		lock.BlockTicks = max(lock.BlockTicks, ticks)
+	}
+	return lock, nil
 }
 
 // spendableOutput is a convenience type that houses a particular utxo and the
@@ -174,7 +235,9 @@ func (p *poolHarness) CreateCoinbaseTx(blockHeight int32, numOutputs uint32) (*b
 		SignatureScript: coinbaseScript,
 		Sequence:        wire.MaxTxInSequenceNum,
 	})
-	totalInput := blockchain.CalcBlockSubsidy(blockHeight, p.chainParams)
+	// The test chains never activate the upgrade to 1-minute blocks.
+	totalInput := blockchain.CalcBlockSubsidy(int64(blockHeight)*600, 600,
+		p.chainParams)
 	amountPerOutput := totalInput / int64(numOutputs)
 	remainder := totalInput - amountPerOutput*int64(numOutputs)
 	for i := range numOutputs {
@@ -333,8 +396,7 @@ func newPoolHarness(chainParams *chaincfg.Params) (*poolHarness, []spendableOutp
 			},
 			ChainParams:      chainParams,
 			FetchUtxoView:    chain.FetchUtxoView,
-			BestHeight:       chain.BestHeight,
-			MedianTimePast:   chain.MedianTimePast,
+			BestSnapshot:     chain.BestSnapshot,
 			CalcSequenceLock: chain.CalcSequenceLock,
 			SigCache:         nil,
 			AddrIndex:        nil,
@@ -1332,6 +1394,7 @@ func TestBlockRejectReason(t *testing.T) {
 		{blockchain.ErrImmatureSpend, "bad-txns-premature-spend-of-coinbase"},
 		{blockchain.ErrSpendTooHigh, "bad-txns-in-belowout"},
 		{blockchain.ErrBadCoinbaseValue, "bad-cb-amount"},
+		{blockchain.ErrBadCoinbaseShape, "bad-cb-shape"},
 		{blockchain.ErrBadFees, "bad-txns-accumulated-fee-outofrange"},
 		{blockchain.ErrTooManySigChecks, "blk-bad-inputs"},
 		{blockchain.ErrScriptMalformed, "blk-bad-inputs"},

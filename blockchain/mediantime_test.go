@@ -10,8 +10,26 @@ import (
 	"time"
 )
 
-// TestMedianTime tests the medianTime implementation.
+// TestMedianTimeNoAdjustment ensures the peers' times do not move the local
+// clock by default.
+func TestMedianTimeNoAdjustment(t *testing.T) {
+	filter := NewMedianTime()
+	now := time.Unix(time.Now().Unix(), 0)
+	for i, offset := range []int64{60, 61, 62, 63, 64} {
+		filter.AddTimeSample(strconv.Itoa(i),
+			now.Add(time.Duration(offset)*time.Second))
+	}
+	if offset := filter.Offset(); offset != 0 {
+		t.Fatalf("offset %v, want 0", offset)
+	}
+}
+
+// TestMedianTime tests the medianTime implementation with the adjustment of
+// up to 70 minutes that used to be the default.
 func TestMedianTime(t *testing.T) {
+	maxAllowedOffsetSecs = 70 * 60
+	defer func() { maxAllowedOffsetSecs = 0 }()
+
 	tests := []struct {
 		in         []int64
 		wantOffset int64

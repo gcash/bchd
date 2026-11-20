@@ -111,12 +111,11 @@ func newMempoolTestHarness(t *testing.T, numOutputs int, opts ...func(*mempool.C
 			MinRelayTxFee:   mempool.DefaultMinRelayTxFee,
 			MaxTxVersion:    2,
 		},
-		ChainParams:    params,
-		FetchUtxoView:  fetchUtxoView,
-		BestHeight:     func() int32 { return height },
-		MedianTimePast: time.Now,
+		ChainParams:   params,
+		FetchUtxoView: fetchUtxoView,
+		BestSnapshot:  testBestState(height),
 		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
-			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+			return &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}, nil
 		},
 	}
 	for _, opt := range opts {
@@ -473,7 +472,7 @@ func TestHandleTestMempoolAcceptReasons(t *testing.T) {
 	h = newMempoolTestHarness(t, 1, func(cfg *mempool.Config) {
 		cfg.CalcSequenceLock = func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 			return &blockchain.SequenceLock{Seconds: -1,
-				BlockHeight: 2000000}, nil
+				BlockTicks: 2000000 * 600}, nil
 		}
 	})
 	result := h.testMempoolAccept(t, h.spend(t, h.outputs[0], 1000), false)
@@ -662,5 +661,20 @@ func TestHandleSendRawTransaction(t *testing.T) {
 	msg = err.(*btcjson.RPCError).Message
 	if msg != "TX rejected: transaction already exists" {
 		t.Errorf("in chain: unexpected message %q", msg)
+	}
+}
+
+// testBestState returns a snapshot callback for a test memory pool whose
+// chain tip is at the passed height, has never activated 1-minute blocks and
+// has the current time as its median time past.
+func testBestState(height int32) func() *blockchain.BestState {
+	return func() *blockchain.BestState {
+		return &blockchain.BestState{
+			Height:            height,
+			MedianTime:        time.Now(),
+			Ticks:             int64(height) * 600,
+			NextBlockInterval: 600,
+			TickSchedule:      blockchain.NewTickSchedule(height+1, 0, false),
+		}
 	}
 }

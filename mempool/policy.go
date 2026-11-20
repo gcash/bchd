@@ -289,7 +289,7 @@ func isDust(txOut *wire.TxOut, dustRelayFee bchutil.Amount) bool {
 // of recognized forms, and not containing "dust" outputs (those that are
 // so small it costs more to process them than they are worth, judged at
 // dustRelayFee).
-func checkTransactionStandard(tx *bchutil.Tx, height int32,
+func checkTransactionStandard(tx *bchutil.Tx, blockTicks int64,
 	medianTimePast time.Time, dustRelayFee bchutil.Amount,
 	maxTxVersion int32, upgrade9Active bool, upgrade12Active bool) error {
 
@@ -303,8 +303,10 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 	}
 
 	// The transaction must be finalized to be standard and therefore
-	// considered for inclusion in a block.
-	if !blockchain.IsFinalizedTransaction(tx, height, medianTimePast) {
+	// considered for inclusion in a block.  A coinbase is never standard,
+	// so its exemption from finality does not matter here.
+	if !blockchain.IsFinalizedTransaction(tx, blockTicks, medianTimePast,
+		false) {
 		return txRuleError(wire.RejectNonstandard, "bad-txns-nonfinal",
 			"transaction is not finalized (bad-txns-nonfinal)")
 	}
@@ -402,9 +404,9 @@ func checkTransactionStandard(tx *bchutil.Tx, height int32,
 	return nil
 }
 
-func CheckTransactionStandard(tx *bchutil.Tx, height int32, medianTimePast time.Time, dustRelayFee bchutil.Amount,
+func CheckTransactionStandard(tx *bchutil.Tx, blockTicks int64, medianTimePast time.Time, dustRelayFee bchutil.Amount,
 	maxTxVersion int32, upgrade9Active bool, upgrade12Active bool) error {
-	return checkTransactionStandard(tx, height, medianTimePast, dustRelayFee, maxTxVersion, upgrade9Active, upgrade12Active)
+	return checkTransactionStandard(tx, blockTicks, medianTimePast, dustRelayFee, maxTxVersion, upgrade9Active, upgrade12Active)
 }
 
 func CheckInputsStandard(tx *bchutil.Tx, utxoView *blockchain.UtxoViewpoint, scriptFlags txscript.ScriptFlags) error {

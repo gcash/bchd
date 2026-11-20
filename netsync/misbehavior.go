@@ -78,15 +78,14 @@ func txBanScore(err error) uint32 {
 // ContextualCheckBlock (3828-3894), which BlockChecked adds when the reject
 // code is a real one (net_processing.cpp:1094-1117).  bchd checks these rules
 // for the block before it is connected, so a failure is the block's own.
-// ErrUnexpectedDifficulty is a target out of range, high-hash (50) in BCHN,
-// or the wrong one, bad-diffbits (100), so it gets the lower.  Codes BCHN
-// gives no score for are left out: a time too old or too new and an old
-// version (3756-3778), a block that forks below the finalized block, whose
-// reject code BCHN keeps internal (REJECT_AGAINST_FINALIZED, validation.h:
-// 753), and a premature coinbase spend.
+// ErrUnexpectedDifficulty is a target out of range or the wrong one, which
+// blockBanScore tells apart as for a header.  Codes BCHN gives no score for
+// are left out: a time too old or too new and an old version (3756-3778), a
+// block that forks below the finalized block, whose reject code BCHN keeps
+// internal (REJECT_AGAINST_FINALIZED, validation.h:753), and a premature
+// coinbase spend.
 var blockBanScores = map[blockchain.ErrorCode]uint32{
 	blockchain.ErrHighHash:              50,  // high-hash
-	blockchain.ErrUnexpectedDifficulty:  50,  // high-hash, bad-diffbits
 	blockchain.ErrBadMerkleRoot:         100, // bad-txnmrklroot
 	blockchain.ErrDuplicateTx:           100, // bad-txns-duplicate
 	blockchain.ErrNoTransactions:        100, // bad-cb-missing
@@ -106,6 +105,7 @@ var blockBanScores = map[blockchain.ErrorCode]uint32{
 	blockchain.ErrBadTxVersion:          100, // bad-txns-version
 	blockchain.ErrMissingCoinbaseHeight: 100, // bad-cb-height
 	blockchain.ErrBadCoinbaseHeight:     100, // bad-cb-height
+	blockchain.ErrBadCoinbaseShape:      100, // bad-cb-shape
 	blockchain.ErrBadCheckpoint:         100, // checkpoint mismatch
 	blockchain.ErrForkTooOld:            100, // bad-fork-prior-to-checkpoint
 	blockchain.ErrInvalidAncestorBlock:  100, // bad-prevblk
@@ -142,9 +142,16 @@ var connectBanScores = map[blockchain.ErrorCode]uint32{
 }
 
 // blockBanScore returns the ban score BCHN gives the peer that sent a block
-// that failed with the rule error code, or 0 when it gives none.  extendsTip
+// with the header that failed with the rule error code, or 0 when it gives
+// none.  powLimit tells a target out of range from a wrong one, and extendsTip
 // tells whether the block's parent was the tip of the chain.
-func blockBanScore(code blockchain.ErrorCode, extendsTip bool) uint32 {
+func blockBanScore(code blockchain.ErrorCode, header *wire.BlockHeader,
+	powLimit *big.Int, extendsTip bool) uint32 {
+
+	if code == blockchain.ErrUnexpectedDifficulty {
+		score, _ := HeaderBanScore(code, header, powLimit)
+		return score
+	}
 	if score, ok := blockBanScores[code]; ok {
 		return score
 	}

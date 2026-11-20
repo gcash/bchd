@@ -63,10 +63,9 @@ func newDSProofPool(t *testing.T) (pool *mempool.TxPool, tx1, tx2 *wire.MsgTx, s
 			}
 			return view, nil
 		},
-		BestHeight:     func() int32 { return 1000000 },
-		MedianTimePast: time.Now,
+		BestSnapshot: testBestState(1000000),
 		CalcSequenceLock: func(*bchutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
-			return &blockchain.SequenceLock{Seconds: -1, BlockHeight: -1}, nil
+			return &blockchain.SequenceLock{Seconds: -1, BlockTicks: -1}, nil
 		},
 	})
 	spend = func(op wire.OutPoint, value, fee int64) *wire.MsgTx {
@@ -315,5 +314,20 @@ func TestDoubleSpendProofRPCLimits(t *testing.T) {
 	score, err := s.GetDoubleSpendProofScore(ctx, &pb.GetDoubleSpendProofScoreRequest{TransactionHash: last[:]})
 	if err != nil || score.Score != 0.25 {
 		t.Fatalf("deep score: %v %v", score, err)
+	}
+}
+
+// testBestState returns a snapshot callback for a test memory pool whose
+// chain tip is at the passed height, has never activated 1-minute blocks and
+// has the current time as its median time past.
+func testBestState(height int32) func() *blockchain.BestState {
+	return func() *blockchain.BestState {
+		return &blockchain.BestState{
+			Height:            height,
+			MedianTime:        time.Now(),
+			Ticks:             int64(height) * 600,
+			NextBlockInterval: 600,
+			TickSchedule:      blockchain.NewTickSchedule(height+1, 0, false),
+		}
 	}
 }

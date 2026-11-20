@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/gcash/bchd/chaincfg/chainhash"
@@ -70,10 +71,10 @@ func (b *BlockChain) notifyMaxBlockSizeLookAhead() {
 	b.notifyLookAhead(b.lookAheadSize)
 }
 
-// ablaNextState returns the ABLA state after a block of the given size at the
-// given height, where prev is the state after its parent.  The activation
-// block starts from the initial state.
-func (b *BlockChain) ablaNextState(prev ABLAState, height int32, size uint64) ABLAState {
+// ablaNextState returns the ABLA state after a block of the given size and
+// interval at the given height, where prev is the state after its parent.
+// The activation block starts from the initial state.
+func (b *BlockChain) ablaNextState(prev ABLAState, height int32, interval, size uint64) ABLAState {
 	forkHeight := b.chainParams.ABLAForkHeight
 	if height < forkHeight {
 		return b.ablaBaseState(height)
@@ -81,7 +82,13 @@ func (b *BlockChain) ablaNextState(prev ABLAState, height int32, size uint64) AB
 	if height == forkHeight {
 		prev = b.ablaBaseState(height - 1)
 	}
-	return prev.nextABLAState(&b.ablaConfig, size)
+	return prev.nextABLAState(&b.ablaConfig, size, interval)
+}
+
+// ablaNodeNextState returns the ABLA state after the block of the passed node
+// with the given size, where prev is the state after its parent.
+func (b *BlockChain) ablaNodeNextState(prev ABLAState, node *blockNode, size uint64) ABLAState {
+	return b.ablaNextState(prev, node.height, uint64(blockInterval(node)), size)
 }
 
 // ablaBlockSize returns the size of the block of the passed node to compute
@@ -102,8 +109,8 @@ func (b *BlockChain) ablaBlockSize(dbTx database.Tx, prev ABLAState, node *block
 		return 0, err
 	}
 	size := uint64(stored)
-	if b.ablaNextState(prev, node.height, size) ==
-		b.ablaNextState(prev, node.height, 0) {
+	if b.ablaNodeNextState(prev, node, size) ==
+		b.ablaNodeNextState(prev, node, 0) {
 
 		return size, nil
 	}
@@ -171,7 +178,7 @@ func (b *BlockChain) ablaStateAfter(node *blockNode) (ABLAState, error) {
 			if err != nil {
 				return err
 			}
-			state = b.ablaNextState(state, n.height, size)
+			state = b.ablaNodeNextState(state, n, size)
 			b.cacheSideABLAState(n.hash, state)
 		}
 		return nil
@@ -188,15 +195,34 @@ func (b *BlockChain) cacheSideABLAState(hash chainhash.Hash, state ABLAState) {
 	b.ablaSideCache[hash] = state
 }
 
+// nextBlockInterval returns the target interval, in ticks, of the block after
+// prevNode.
+func nextBlockInterval(prevNode *blockNode) uint64 {
+	if prevNode == nil {
+		return legacyBlockInterval
+	}
+	return uint64(prevNode.nextInterval)
+}
+
+// scaleSizeFloor returns the floor of the block size limit for a block of the
+// given interval, where floor is the one for a 600-tick block.
+func scaleSizeFloor(floor, interval uint64) uint64 {
+	return min(muldiv(floor, interval, ablaBaseBlockInterval),
+		TEMP_32_BIT_MAX_SAFE_BLOCKSIZE_LIMIT)
+}
+
 // blockSizeLimit returns the maximum serialized size of a block at the given
-// height whose parent is prevNode, with floor as the limit before ABLA and
-// the floor of the ABLA limit after.
+// height whose parent is prevNode, with floor as the limit of a 600-tick
+// block before ABLA and the floor of the ABLA limit after.  Both are scaled
+// to the interval of the block.
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) blockSizeLimit(prevNode *blockNode, height int32, floor uint64) (uint64, error) {
 	if height <= b.chainParams.UahfForkHeight {
 		return LegacyMaxBlockSize, nil
 	}
+	interval := nextBlockInterval(prevNode)
+	floor = scaleSizeFloor(floor, interval)
 	if height <= b.chainParams.ABLAForkHeight {
 		return floor, nil
 	}
@@ -204,16 +230,16 @@ func (b *BlockChain) blockSizeLimit(prevNode *blockNode, height int32, floor uin
 	if err != nil {
 		return 0, err
 	}
-	// The floor is a minimum, as in Bitcoin Cash Node.
-	return max(floor, state.getBlockSizeLimit()), nil
+	// The floor is a minimum.
+	return max(floor, state.blockSizeLimitAt(interval)), nil
 }
 
 // networkSizeFloor returns the floor of the block size limit that the network
-// enforces: its default block size, as in Bitcoin Cash Node.  Blocks are
-// validated against it, so a larger excessive block size does not loosen
-// validation.  On regtest and simnet, which have no network to agree with,
-// and for chain parameters without a default block size, it is the excessive
-// block size.
+// enforces for a 600-tick block: its default block size.  Shorter blocks have
+// it scaled down, see blockSizeLimit.  Blocks are validated against it, so a
+// larger excessive block size does not loosen validation.  On regtest and
+// simnet, which have no network to agree with, and for chain parameters
+// without a default block size, it is the excessive block size.
 func (b *BlockChain) networkSizeFloor() uint64 {
 	floor := uint64(b.excessiveBlockSize)
 	switch b.chainParams.Net {
@@ -257,18 +283,60 @@ func (b *BlockChain) dbFetchValidABLAState(dbTx database.Tx, height int32) (ABLA
 	return *state, nil
 }
 
-// serializeABLAConfig returns the activation height and the ABLA parameters
-// that determine the stored states.
+// serializeABLAConfig returns the activation height, the ABLA parameters and
+// the upgrade 2027 activation time, which sets the block intervals, that
+// determine the stored states.  The activation time comes last, see
+// ablaConfigTimeChange.
 func (b *BlockChain) serializeABLAConfig() []byte {
 	c := &b.ablaConfig
 	fields := []uint64{c.epsilon0, c.beta0, c.n0, c.gammaReciprocal,
-		c.zetaXB7, c.thetaReciprocal, c.delta, c.epsilonMax, c.betaMax}
+		c.zetaXB7, c.thetaReciprocal, c.delta, c.epsilonMax, c.betaMax,
+		b.upgrade2027ActivationTime}
 	serialized := make([]byte, 4, 4+8*len(fields))
 	byteOrder.PutUint32(serialized, uint32(b.chainParams.ABLAForkHeight))
 	for _, field := range fields {
 		serialized = byteOrder.AppendUint64(serialized, field)
 	}
 	return serialized
+}
+
+// ablaConfigTimeChange returns the upgrade 2027 activation time the stored
+// ABLA configuration was serialized with, when it differs from config only in
+// that time.  A configuration stored without one, by earlier versions, had
+// every block at 600 ticks, as if the upgrade never activated.
+func ablaConfigTimeChange(stored, config []byte) (uint64, bool) {
+	const timeSize = 8
+	prefix := config[:len(config)-timeSize]
+	switch {
+	case len(stored) == len(config) &&
+		bytes.Equal(stored[:len(prefix)], prefix):
+
+		return byteOrder.Uint64(stored[len(prefix):]), true
+
+	case bytes.Equal(stored, prefix):
+		return math.MaxUint64, true
+	}
+	return 0, false
+}
+
+// firstIntervalChange returns the lowest main chain height, from the ABLA
+// activation height on, of a block whose interval depends on whether the
+// upgrade 2027 activation time is activationTime or any later time, or -1
+// when there is none.  Median time past never decreases along a chain, so
+// such blocks are at the tip.
+func (b *BlockChain) firstIntervalChange(activationTime uint64) int32 {
+	first := int32(-1)
+	node := b.bestChain.Tip()
+	for ; node != nil && node.parent != nil &&
+		node.height >= b.chainParams.ABLAForkHeight; node = node.parent {
+
+		medianTime := node.parent.CalcPastMedianTime().Unix()
+		if !upgrade2027Active(medianTime, activationTime) {
+			break
+		}
+		first = node.height
+	}
+	return first
 }
 
 // isBlockDataMissing returns whether err reports that the data of a block is
@@ -286,16 +354,20 @@ func isBlockDataMissing(err error) bool {
 // initABLAState loads the ABLA state after the chain tip.  Missing or invalid
 // stored states, such as those written by earlier versions, which kept only
 // the elastic buffer size, are rebuilt from the stored block sizes.  All of
-// them are rebuilt when they were stored with another ABLA configuration.
+// them are rebuilt when they were stored with another ABLA configuration, or
+// only those of the blocks whose interval it changes when that is the upgrade
+// 2027 activation time.
 func (b *BlockChain) initABLAState() error {
 	b.ablaSideCache = make(map[chainhash.Hash]ABLAState)
 
 	var pruned, configChanged bool
+	var storedConfig []byte
 	config := b.serializeABLAConfig()
 	err := b.db.Update(func(dbTx database.Tx) error {
 		pruned = bytes.Equal(dbFetchBlockchainType(dbTx), prunedBlockchainEntryValue)
 		meta := dbTx.Metadata()
-		configChanged = !bytes.Equal(meta.Get(ablaConfigKeyName), config)
+		storedConfig = bytes.Clone(meta.Get(ablaConfigKeyName))
+		configChanged = !bytes.Equal(storedConfig, config)
 		_, err := meta.CreateBucketIfNotExists(ablaStateBucketName)
 		return err
 	})
@@ -319,13 +391,19 @@ func (b *BlockChain) initABLAState() error {
 	}
 
 	// Find the first missing or invalid state.  One pass over the bucket
-	// is much faster than a read per height.
+	// is much faster than a read per height.  When only the upgrade 2027
+	// activation time changed, the states of the blocks whose interval
+	// does not depend on it are kept.
 	firstBad := int32(-1)
 	if configChanged {
 		firstBad = forkHeight
+		if oldTime, ok := ablaConfigTimeChange(storedConfig, config); ok {
+			firstBad = b.firstIntervalChange(min(oldTime,
+				b.upgrade2027ActivationTime))
+		}
 	}
 	err = b.db.View(func(dbTx database.Tx) error {
-		if firstBad >= 0 {
+		if firstBad == forkHeight {
 			return nil
 		}
 		valid := make([]bool, tip.height-forkHeight+1)
@@ -348,16 +426,25 @@ func (b *BlockChain) initABLAState() error {
 		}
 		for i, ok := range valid {
 			if !ok {
-				firstBad = forkHeight + int32(i)
-				return nil
+				h := forkHeight + int32(i)
+				if firstBad < 0 || h < firstBad {
+					firstBad = h
+				}
+				break
 			}
+		}
+		if firstBad >= 0 {
+			return nil
 		}
 		state, err := b.dbFetchValidABLAState(dbTx, tip.height)
 		b.ablaState = state
 		return err
 	})
-	if err != nil || firstBad < 0 {
+	if err != nil {
 		return err
+	}
+	if firstBad < 0 {
+		return putConfig()
 	}
 
 	log.Infof("Rebuilding the ABLA state for blocks %d to %d. This "+
@@ -389,7 +476,7 @@ func (b *BlockChain) initABLAState() error {
 				size, err := b.ablaBlockSize(dbTx, state, node)
 				switch {
 				case err == nil:
-					state = b.ablaNextState(state, h, size)
+					state = b.ablaNodeNextState(state, node, size)
 				case (pruned || b.pruneMode) && isBlockDataMissing(err):
 					state = b.prunedABLAState(dbTx, h)
 					approximated++

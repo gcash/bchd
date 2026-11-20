@@ -1,0 +1,715 @@
+{
+  "description": "Future time limit vectors. A header's timestamp t is accepted iff t > mtpPrev and t <= maxTime, where mtpPrev is the median time past of the parent of the block being validated and maxTime = MaxTime(mtpPrev, now): now + 7200 if the 2027 rules are not yet active on the parent; otherwise min(now + 7200, mtpPrev + 1) if mtpPrev > now + 720; otherwise now + 720. `now` is the validating node's own clock in Unix seconds, never adjusted by peer reports; it is an input here. `height` is the block being validated and `activationHeight` is H_a: the rules are active on the parent, and the last two arms apply, iff height >= H_a + 1 (`rulesActiveOnParent`). `mtpPrevMinusNow` and `maxTimeMinusNow` restate mtpPrev and maxTime relative to the clock. `validTimestamps` is the number of timestamps that pass, the size of (mtpPrev, maxTime], zero when the chain cannot be extended at this clock reading. Each entry of `probes` is one timestamp `time` (with `timeMinusNow`) and whether a header carrying it is `valid`. Times in the vectors are JSON integers in seconds; heights and constants are decimal strings.",
+  "constants": {
+    "LEGACY_MAX_FUTURE_BLOCK_TIME": "7200",
+    "MAX_FUTURE_BLOCK_TIME": "720",
+    "ACTIVATION_HEIGHT": "1000"
+  },
+  "vectors": [
+    {
+      "name": "pre_typical",
+      "height": "500",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": false,
+      "now": 1810382400,
+      "mtpPrev": 1810379400,
+      "mtpPrevMinusNow": -3000,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 10200,
+      "probes": [
+        {
+          "time": 1810379400,
+          "timeMinusNow": -3000,
+          "valid": false
+        },
+        {
+          "time": 1810379401,
+          "timeMinusNow": -2999,
+          "valid": true
+        },
+        {
+          "time": 1810382400,
+          "timeMinusNow": 0,
+          "valid": true
+        },
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": true
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": true
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": true
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        }
+      ],
+      "note": "well before activation, median 50 minutes behind the clock: the bound is now + 7200. t == mtp_prev is refused (the lower bound is strict), now + 721 is still fine here"
+    },
+    {
+      "name": "pre_activation_block",
+      "height": "1000",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": false,
+      "now": 1810382400,
+      "mtpPrev": 1810379400,
+      "mtpPrevMinusNow": -3000,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 10200,
+      "probes": [
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": true
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": true
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": true
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        }
+      ],
+      "note": "the block at H_a itself: its parent is H_a - 1, the rules are not yet active on the parent, so the legacy bound applies. H_a is the last block under now + 7200"
+    },
+    {
+      "name": "pre_mtp_ahead_721",
+      "height": "1000",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": false,
+      "now": 1810382400,
+      "mtpPrev": 1810383121,
+      "mtpPrevMinusNow": 721,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 6479,
+      "probes": [
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": false
+        },
+        {
+          "time": 1810383122,
+          "timeMinusNow": 722,
+          "valid": true
+        },
+        {
+          "time": 1810383123,
+          "timeMinusNow": 723,
+          "valid": true
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": true
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        }
+      ],
+      "note": "median 721 seconds ahead before activation: no floor, the bound stays now + 7200 and 6,479 timestamps pass, where the same inputs after activation admit exactly one"
+    },
+    {
+      "name": "pre_mtp_ahead_7199",
+      "height": "1000",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": false,
+      "now": 1810382400,
+      "mtpPrev": 1810389599,
+      "mtpPrevMinusNow": 7199,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 1,
+      "probes": [
+        {
+          "time": 1810389599,
+          "timeMinusNow": 7199,
+          "valid": false
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": true
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        }
+      ],
+      "note": "median one second under the legacy ceiling: one timestamp passes, now + 7200"
+    },
+    {
+      "name": "pre_mtp_ahead_7200",
+      "height": "1000",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": false,
+      "now": 1810382400,
+      "mtpPrev": 1810389600,
+      "mtpPrevMinusNow": 7200,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 0,
+      "probes": [
+        {
+          "time": 1810389599,
+          "timeMinusNow": 7199,
+          "valid": false
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        }
+      ],
+      "note": "median on the legacy ceiling: nothing passes until the clock advances. now + 7200 fails the lower bound, now + 7201 the upper"
+    },
+    {
+      "name": "post_first_block_typical",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810379400,
+      "mtpPrevMinusNow": -3000,
+      "maxTime": 1810383120,
+      "maxTimeMinusNow": 720,
+      "validTimestamps": 3720,
+      "probes": [
+        {
+          "time": 1810379400,
+          "timeMinusNow": -3000,
+          "valid": false
+        },
+        {
+          "time": 1810379401,
+          "timeMinusNow": -2999,
+          "valid": true
+        },
+        {
+          "time": 1810382400,
+          "timeMinusNow": 0,
+          "valid": true
+        },
+        {
+          "time": 1810383119,
+          "timeMinusNow": 719,
+          "valid": true
+        },
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": true
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": false
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        }
+      ],
+      "note": "the block at H_a + 1, the first under the new bound: now + 720 passes and now + 721 does not"
+    },
+    {
+      "name": "post_later_block_typical",
+      "height": "5000",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810382100,
+      "mtpPrevMinusNow": -300,
+      "maxTime": 1810383120,
+      "maxTimeMinusNow": 720,
+      "validTimestamps": 1020,
+      "probes": [
+        {
+          "time": 1810382100,
+          "timeMinusNow": -300,
+          "valid": false
+        },
+        {
+          "time": 1810382101,
+          "timeMinusNow": -299,
+          "valid": true
+        },
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": true
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": false
+        }
+      ],
+      "note": "steady state at one-minute blocks, median five minutes behind the clock"
+    },
+    {
+      "name": "post_mtp_equals_now",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810382400,
+      "mtpPrevMinusNow": 0,
+      "maxTime": 1810383120,
+      "maxTimeMinusNow": 720,
+      "validTimestamps": 720,
+      "probes": [
+        {
+          "time": 1810382400,
+          "timeMinusNow": 0,
+          "valid": false
+        },
+        {
+          "time": 1810382401,
+          "timeMinusNow": 1,
+          "valid": true
+        },
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": true
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": false
+        }
+      ],
+      "note": "median equal to the clock: 720 timestamps pass, now + 1 through now + 720"
+    },
+    {
+      "name": "post_mtp_ahead_719",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810383119,
+      "mtpPrevMinusNow": 719,
+      "maxTime": 1810383120,
+      "maxTimeMinusNow": 720,
+      "validTimestamps": 1,
+      "probes": [
+        {
+          "time": 1810383119,
+          "timeMinusNow": 719,
+          "valid": false
+        },
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": true
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": false
+        }
+      ],
+      "note": "median 719 seconds ahead: still the limit arm, bound now + 720, and exactly one timestamp passes, now + 720"
+    },
+    {
+      "name": "post_mtp_ahead_720_dead_second",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810383120,
+      "mtpPrevMinusNow": 720,
+      "maxTime": 1810383120,
+      "maxTimeMinusNow": 720,
+      "validTimestamps": 0,
+      "probes": [
+        {
+          "time": 1810383119,
+          "timeMinusNow": 719,
+          "valid": false
+        },
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": false
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": false
+        },
+        {
+          "time": 1810383122,
+          "timeMinusNow": 722,
+          "valid": false
+        }
+      ],
+      "note": "median exactly 720 seconds ahead: mtp_prev > now + 720 is false, so the bound is now + 720, which equals the median. now + 720 fails the strict lower bound and now + 721 fails the upper: nothing is valid at this clock reading"
+    },
+    {
+      "name": "post_mtp_ahead_720_one_second_later",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382401,
+      "mtpPrev": 1810383120,
+      "mtpPrevMinusNow": 719,
+      "maxTime": 1810383121,
+      "maxTimeMinusNow": 720,
+      "validTimestamps": 1,
+      "probes": [
+        {
+          "time": 1810383120,
+          "timeMinusNow": 719,
+          "valid": false
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 720,
+          "valid": true
+        },
+        {
+          "time": 1810383122,
+          "timeMinusNow": 721,
+          "valid": false
+        }
+      ],
+      "note": "the same parent median one second later (now is one greater, so the excess is 719): one timestamp passes again, mtp_prev + 1. The halt lasts one second"
+    },
+    {
+      "name": "post_mtp_ahead_721",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810383121,
+      "mtpPrevMinusNow": 721,
+      "maxTime": 1810383122,
+      "maxTimeMinusNow": 722,
+      "validTimestamps": 1,
+      "probes": [
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": false
+        },
+        {
+          "time": 1810383121,
+          "timeMinusNow": 721,
+          "valid": false
+        },
+        {
+          "time": 1810383122,
+          "timeMinusNow": 722,
+          "valid": true
+        },
+        {
+          "time": 1810383123,
+          "timeMinusNow": 723,
+          "valid": false
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        }
+      ],
+      "note": "median 721 seconds ahead: the floor arm, bound mtp_prev + 1 = now + 722, the only timestamp that passes. now + 720, inside the ordinary limit, fails the lower bound"
+    },
+    {
+      "name": "post_mtp_ahead_3600",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810386000,
+      "mtpPrevMinusNow": 3600,
+      "maxTime": 1810386001,
+      "maxTimeMinusNow": 3601,
+      "validTimestamps": 1,
+      "probes": [
+        {
+          "time": 1810383120,
+          "timeMinusNow": 720,
+          "valid": false
+        },
+        {
+          "time": 1810386000,
+          "timeMinusNow": 3600,
+          "valid": false
+        },
+        {
+          "time": 1810386001,
+          "timeMinusNow": 3601,
+          "valid": true
+        },
+        {
+          "time": 1810386002,
+          "timeMinusNow": 3602,
+          "valid": false
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        }
+      ],
+      "note": "median an hour ahead, as a pre-activation lead can leave it: one timestamp, mtp_prev + 1"
+    },
+    {
+      "name": "post_mtp_ahead_7198",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810389598,
+      "mtpPrevMinusNow": 7198,
+      "maxTime": 1810389599,
+      "maxTimeMinusNow": 7199,
+      "validTimestamps": 1,
+      "probes": [
+        {
+          "time": 1810389598,
+          "timeMinusNow": 7198,
+          "valid": false
+        },
+        {
+          "time": 1810389599,
+          "timeMinusNow": 7199,
+          "valid": true
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        }
+      ],
+      "note": "bound mtp_prev + 1 = now + 7199, one below the old ceiling, which therefore does not bind yet: now + 7200 is refused here although the legacy bound allowed it"
+    },
+    {
+      "name": "post_mtp_ahead_7199",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810389599,
+      "mtpPrevMinusNow": 7199,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 1,
+      "probes": [
+        {
+          "time": 1810389599,
+          "timeMinusNow": 7199,
+          "valid": false
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": true
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        }
+      ],
+      "note": "the top of the floor band: mtp_prev + 1 equals now + 7200, so both arguments of the min agree and one timestamp passes"
+    },
+    {
+      "name": "post_mtp_ahead_7200",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810389600,
+      "mtpPrevMinusNow": 7200,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 0,
+      "probes": [
+        {
+          "time": 1810389599,
+          "timeMinusNow": 7199,
+          "valid": false
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        }
+      ],
+      "note": "median on the old ceiling: min(now + 7200, mtp_prev + 1) = now + 7200 = mtp_prev, so nothing passes; mtp_prev + 1 = now + 7201 is cut off by the min"
+    },
+    {
+      "name": "post_mtp_ahead_7201",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810389601,
+      "mtpPrevMinusNow": 7201,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 0,
+      "probes": [
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        },
+        {
+          "time": 1810389602,
+          "timeMinusNow": 7202,
+          "valid": false
+        }
+      ],
+      "note": "median past the old ceiling: the bound now + 7200 is below the median, nothing passes, and the count is zero rather than negative"
+    },
+    {
+      "name": "post_mtp_far_ahead",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810482400,
+      "mtpPrevMinusNow": 100000,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 0,
+      "probes": [
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        },
+        {
+          "time": 1810482400,
+          "timeMinusNow": 100000,
+          "valid": false
+        },
+        {
+          "time": 1810482401,
+          "timeMinusNow": 100001,
+          "valid": false
+        }
+      ],
+      "note": "median more than a day ahead, e.g. a clock that stepped far backwards: the bound stays now + 7200 and nothing passes"
+    },
+    {
+      "name": "seam_block_Ha_legacy",
+      "height": "1000",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": false,
+      "now": 1810382400,
+      "mtpPrev": 1810384200,
+      "mtpPrevMinusNow": 1800,
+      "maxTime": 1810389600,
+      "maxTimeMinusNow": 7200,
+      "validTimestamps": 5400,
+      "probes": [
+        {
+          "time": 1810384200,
+          "timeMinusNow": 1800,
+          "valid": false
+        },
+        {
+          "time": 1810384201,
+          "timeMinusNow": 1801,
+          "valid": true
+        },
+        {
+          "time": 1810384202,
+          "timeMinusNow": 1802,
+          "valid": true
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": true
+        },
+        {
+          "time": 1810389601,
+          "timeMinusNow": 7201,
+          "valid": false
+        }
+      ],
+      "note": "block H_a with the median 30 minutes ahead: legacy arm, 5,400 timestamps pass. Same median and clock as seam_block_Ha_plus_1_floor"
+    },
+    {
+      "name": "seam_block_Ha_plus_1_floor",
+      "height": "1001",
+      "activationHeight": "1000",
+      "rulesActiveOnParent": true,
+      "now": 1810382400,
+      "mtpPrev": 1810384200,
+      "mtpPrevMinusNow": 1800,
+      "maxTime": 1810384201,
+      "maxTimeMinusNow": 1801,
+      "validTimestamps": 1,
+      "probes": [
+        {
+          "time": 1810384200,
+          "timeMinusNow": 1800,
+          "valid": false
+        },
+        {
+          "time": 1810384201,
+          "timeMinusNow": 1801,
+          "valid": true
+        },
+        {
+          "time": 1810384202,
+          "timeMinusNow": 1802,
+          "valid": false
+        },
+        {
+          "time": 1810389600,
+          "timeMinusNow": 7200,
+          "valid": false
+        }
+      ],
+      "note": "block H_a + 1 with the same median and clock: floor arm, one timestamp passes. Only the height changed, so this pair pins that the boundary falls between H_a and H_a + 1"
+    }
+  ]
+}

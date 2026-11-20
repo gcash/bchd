@@ -366,20 +366,25 @@ func getBlockTestBlock(t *testing.T) (*bchutil.Block, []blockchain.SpentTxOut) {
 // block fields set the same way handleGetBlock sets them.
 func getBlockTestReply(blk *bchutil.Block) btcjson.GetBlockVerboseResult {
 	blockHeader := &blk.MsgBlock().Header
+	confirmations := int64(1 + getBlockTestBestHeight - blk.Height())
 	return btcjson.GetBlockVerboseResult{
-		Hash:          blk.Hash().String(),
-		Version:       blockHeader.Version,
-		VersionHex:    fmt.Sprintf("%08x", blockHeader.Version),
-		MerkleRoot:    blockHeader.MerkleRoot.String(),
-		PreviousHash:  blockHeader.PrevBlock.String(),
-		Nonce:         blockHeader.Nonce,
-		Time:          blockHeader.Timestamp.Unix(),
-		Confirmations: int64(1 + getBlockTestBestHeight - blk.Height()),
-		Height:        int64(blk.Height()),
-		Size:          int32(blk.MsgBlock().SerializeSize()),
-		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
+		Hash:               blk.Hash().String(),
+		Version:            blockHeader.Version,
+		VersionHex:         fmt.Sprintf("%08x", blockHeader.Version),
+		MerkleRoot:         blockHeader.MerkleRoot.String(),
+		PreviousHash:       blockHeader.PrevBlock.String(),
+		Nonce:              blockHeader.Nonce,
+		Time:               blockHeader.Timestamp.Unix(),
+		Confirmations:      confirmations,
+		ConfirmationsTicks: confirmations * 600,
+		Height:             int64(blk.Height()),
+		Ticks:              int64(blk.Height()) * 600,
+		Size:               int32(blk.MsgBlock().SerializeSize()),
+		Bits:               strconv.FormatInt(int64(blockHeader.Bits), 16),
 		Difficulty: getDifficultyRatio(blockHeader.Bits,
 			&chaincfg.MainNetParams),
+		TargetTime:     600,
+		NextTargetTime: 600,
 	}
 }
 
@@ -454,19 +459,23 @@ func TestGetBlockVerbosity3(t *testing.T) {
 
 	reply := getBlockTestReply(blk)
 	assertGolden(t, "getblock-verbosity-3.json", btcjson.GetBlockVerboseTxResult{
-		Hash:          reply.Hash,
-		Confirmations: reply.Confirmations,
-		Size:          reply.Size,
-		Height:        reply.Height,
-		Version:       reply.Version,
-		VersionHex:    reply.VersionHex,
-		MerkleRoot:    reply.MerkleRoot,
-		Tx:            rawTxns,
-		Time:          reply.Time,
-		Nonce:         reply.Nonce,
-		Bits:          reply.Bits,
-		Difficulty:    reply.Difficulty,
-		PreviousHash:  reply.PreviousHash,
+		Hash:               reply.Hash,
+		Confirmations:      reply.Confirmations,
+		ConfirmationsTicks: reply.ConfirmationsTicks,
+		Size:               reply.Size,
+		Height:             reply.Height,
+		Ticks:              reply.Ticks,
+		Version:            reply.Version,
+		VersionHex:         reply.VersionHex,
+		MerkleRoot:         reply.MerkleRoot,
+		Tx:                 rawTxns,
+		Time:               reply.Time,
+		Nonce:              reply.Nonce,
+		Bits:               reply.Bits,
+		Difficulty:         reply.Difficulty,
+		TargetTime:         reply.TargetTime,
+		NextTargetTime:     reply.NextTargetTime,
+		PreviousHash:       reply.PreviousHash,
 	})
 }
 

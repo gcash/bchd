@@ -82,7 +82,8 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 		blockHeader := &block.MsgBlock().Header
 		newNode = b.headers.take(block.Hash(), prevNode)
 		if newNode == nil {
-			newNode = newBlockNode(blockHeader, prevNode)
+			newNode = newBlockNode(blockHeader, prevNode,
+				b.upgrade2027ActivationTime)
 		}
 		newNode.status = statusDataStored
 		newNode.received = uint32(time.Now().Unix())
@@ -113,9 +114,9 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 	return isMainChain, nil
 }
 
-// maxUnrequestedBlocksAhead is how far above the tip an unrequested block may
-// be.
-const maxUnrequestedBlocksAhead = 288
+// maxUnrequestedTicksAhead is how many ticks above the tip an unrequested
+// block may be: 288 10-minute blocks, or 2,880 1-minute blocks.
+const maxUnrequestedTicksAhead = 288 * legacyBlockInterval
 
 // checkUnrequestedBlock returns an error when a block that was not requested
 // has less work than the tip or the minimum chain work, or is too far ahead
@@ -124,7 +125,7 @@ const maxUnrequestedBlocksAhead = 288
 // This function MUST be called with the chain state lock held (for reads).
 func (b *BlockChain) checkUnrequestedBlock(block *bchutil.Block, prevNode *blockNode) error {
 	tip := b.bestChain.Tip()
-	height := prevNode.height + 1
+	ticks := prevNode.ticks + int64(prevNode.nextInterval)
 	workSum := new(big.Int).Add(prevNode.workSum,
 		CalcWork(block.MsgBlock().Header.Bits))
 	minWork := b.chainParams.MinimumChainWork
@@ -133,10 +134,10 @@ func (b *BlockChain) checkUnrequestedBlock(block *bchutil.Block, prevNode *block
 		str := fmt.Sprintf("unrequested block %v has less work than "+
 			"the tip", block.Hash())
 		return ruleError(ErrUnrequestedBlock, str)
-	case height > tip.height+maxUnrequestedBlocksAhead:
-		str := fmt.Sprintf("unrequested block %v at height %d is too "+
-			"far ahead of the tip at height %d", block.Hash(), height,
-			tip.height)
+	case ticks > tip.ticks+maxUnrequestedTicksAhead:
+		str := fmt.Sprintf("unrequested block %v at height %d is %d "+
+			"ticks ahead of the tip at height %d", block.Hash(),
+			prevNode.height+1, ticks-tip.ticks, tip.height)
 		return ruleError(ErrUnrequestedBlock, str)
 	case minWork != nil && workSum.Cmp(minWork) < 0:
 		str := fmt.Sprintf("unrequested block %v has less than the "+
