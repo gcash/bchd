@@ -160,7 +160,7 @@ type config struct {
 	MaxReorgDepth           int32         `long:"maxreorgdepth" description:"Depth at which main chain blocks are finalized, so that blocks forking the chain below them are rejected (-1 to disable)"`
 	FinalizationDelay       int64         `long:"finalizationdelay" description:"Time in seconds a block must have been known, and the node running, before the block can be finalized"`
 	NoParkDeepReorg         bool          `long:"noparkdeepreorg" description:"Do not park a block that would cause a reorganization deeper than one block; such blocks are connected by most work alone"`
-	NoAutomaticUnparking    bool          `long:"noautomaticunparking" description:"Do not unpark a parked chain when it gains enough proof of work, so it stays parked"`
+	NoAutomaticUnparking    bool          `long:"noautomaticunparking" description:"Do not unpark a parked chain when it gains enough proof of work; it can then only be unparked with unparkblock"`
 	Upgrade2027Time         *uint64       `long:"upgrade2027activationtime" description:"Median time past, in seconds since the epoch, at which the May 2027 upgrade to 1-minute blocks activates, for testing -- Must not be before the network's ASERT anchor block; changing it once a block reached the old or new time requires a fresh data directory (default: 1810382400, chipnet: 1794744000)"`
 	DbType                  string        `long:"dbtype" description:"Database backend to use for the Block Chain"`
 	Profile                 string        `long:"profile" description:"Enable HTTP profiling on the given port on localhost, or on IP:port -- NOTE port must be between 1024 and 65535"`

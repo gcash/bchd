@@ -917,6 +917,59 @@ func (c *Client) InvalidateBlock(blockHash *chainhash.Hash) error {
 	return c.InvalidateBlockAsync(blockHash).Receive()
 }
 
+// FutureParkBlockResult is a future promise to deliver the result of a
+// ParkBlockAsync or UnparkBlockAsync RPC invocation (or an applicable error).
+type FutureParkBlockResult chan *response
+
+// Receive waits for the response promised by the future.
+func (r FutureParkBlockResult) Receive() error {
+	_, err := receiveFuture(r)
+
+	return err
+}
+
+// ParkBlockAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See ParkBlock for the blocking version and more details.
+func (c *Client) ParkBlockAsync(blockHash *chainhash.Hash) FutureParkBlockResult {
+	hash := ""
+	if blockHash != nil {
+		hash = blockHash.String()
+	}
+
+	cmd := btcjson.NewParkBlockCmd(hash)
+	return c.sendCmd(cmd)
+}
+
+// ParkBlock parks a specific block, so that its chain is not connected until
+// it has enough more work than the main chain or is unparked.
+func (c *Client) ParkBlock(blockHash *chainhash.Hash) error {
+	return c.ParkBlockAsync(blockHash).Receive()
+}
+
+// UnparkBlockAsync returns an instance of a type that can be used to get the
+// result of the RPC at some future time by invoking the Receive function on the
+// returned instance.
+//
+// See UnparkBlock for the blocking version and more details.
+func (c *Client) UnparkBlockAsync(blockHash *chainhash.Hash) FutureParkBlockResult {
+	hash := ""
+	if blockHash != nil {
+		hash = blockHash.String()
+	}
+
+	cmd := btcjson.NewUnparkBlockCmd(hash)
+	return c.sendCmd(cmd)
+}
+
+// UnparkBlock unparks a specific block, the blocks between it and the main
+// chain, and the blocks built on it.
+func (c *Client) UnparkBlock(blockHash *chainhash.Hash) error {
+	return c.UnparkBlockAsync(blockHash).Receive()
+}
+
 // FutureGetCFilterResult is a future promise to deliver the result of a
 // GetCFilterAsync RPC invocation (or an applicable error).
 type FutureGetCFilterResult chan *response

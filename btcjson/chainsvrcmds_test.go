@@ -1075,6 +1075,32 @@ func TestChainSvrCmds(t *testing.T) {
 			},
 		},
 		{
+			name: "parkblock",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("parkblock", "123")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewParkBlockCmd("123")
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"parkblock","params":["123"],"id":1}`,
+			unmarshalled: &btcjson.ParkBlockCmd{
+				BlockHash: "123",
+			},
+		},
+		{
+			name: "unparkblock",
+			newCmd: func() (interface{}, error) {
+				return btcjson.NewCmd("unparkblock", "123")
+			},
+			staticCmd: func() interface{} {
+				return btcjson.NewUnparkBlockCmd("123")
+			},
+			marshalled: `{"jsonrpc":"1.0","method":"unparkblock","params":["123"],"id":1}`,
+			unmarshalled: &btcjson.UnparkBlockCmd{
+				BlockHash: "123",
+			},
+		},
+		{
 			name: "ping",
 			newCmd: func() (interface{}, error) {
 				return btcjson.NewCmd("ping")

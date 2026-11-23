@@ -165,7 +165,8 @@ chain's blocks stored but parked (see [Block Parking](#Parking)) until that
 chain has enough work. To switch to it sooner, call `invalidateblock` with the
 first block of the node's chain after the fork point: the other chain is then
 unparked and connected at once, since the node's chain has no work since the
-fork.
+fork. Or call `unparkblock` with the other chain's tip, which switches to it at
+once if it has more work than the node's chain.
 
 <a name="Parking" />
 
@@ -204,7 +205,11 @@ Blocks parked before `noparkdeepreorg` was set stay parked until their chain
 has enough work. Unlike Bitcoin Cash Node, bchd does not choose its chain again
 when it starts, so a parked chain that already has enough work when the node
 starts with automatic unparking turned back on is connected when its next
-block arrives.
+block arrives. The `unparkblock` RPC unparks a chain by hand, which is the only
+way a chain is unparked with `noautomaticunparking`, and `parkblock` parks a
+block by hand. While unparking is automatic, a block parked by hand is
+connected again at once, since the main chain then has no work past the fork,
+so `parkblock` is mostly useful together with `noautomaticunparking`.
 
 <a name="BchctlConfig" />
 

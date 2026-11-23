@@ -140,7 +140,8 @@ Application Options:
 	                                 reorganization deeper than one block; such
 	                                 blocks are connected by most work alone
 	    --noautomaticunparking       Do not unpark a parked chain when it gains
-	                                 enough proof of work, so it stays parked
+	                                 enough proof of work; it can then only be
+	                                 unparked with unparkblock
 	    --upgrade2027activationtime= Median time past, in seconds since the
 	                                 epoch, at which the May 2027 upgrade to
 	                                 1-minute blocks activates, for testing --

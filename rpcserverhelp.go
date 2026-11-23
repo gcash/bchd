@@ -848,6 +848,16 @@ var helpDescsEnUS = map[string]string{
 	"invalidateblock--synopsis": "Invalidate a block.",
 	"invalidateblock-blockhash": "Hash of the block you want to invalidate",
 
+	// ParkBlockCmd
+	"parkblock--synopsis": "Parks a block, so that its chain is not connected until it has enough more work than the main chain or is unparked.\n" +
+		"When the block is in the main chain, the main chain is disconnected down to its parent.\n" +
+		"While automatic unparking is on, the default, the block's chain is connected again at once, since the main chain then has no work past the fork, so a parked block only stays off with --noautomaticunparking.",
+	"parkblock-blockhash": "Hash of the block to park",
+
+	// UnparkBlockCmd
+	"unparkblock--synopsis": "Unparks a block, the blocks between it and the main chain, and the blocks built on it, and connects the best chain among them if it has more work than the main chain.",
+	"unparkblock-blockhash": "Hash of the block to unpark",
+
 	// SetGenerateCmd help.
 	"setgenerate--synopsis":    "Set the server to generate coins (mine) or not.",
 	"setgenerate-generate":     "Use true to enable generation, false to disable it",
@@ -1040,6 +1050,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"node":                  nil,
 	"help":                  {(*string)(nil), (*string)(nil)},
 	"invalidateblock":       nil,
+	"parkblock":             nil,
 	"ping":                  nil,
 	"reconsiderblock":       nil,
 	"searchrawtransactions": {(*string)(nil), (*[]btcjson.SearchRawTransactionsResult)(nil)},
@@ -1048,6 +1059,7 @@ var rpcResultTypes = map[string][]interface{}{
 	"stop":                  {(*string)(nil)},
 	"submitblock":           {nil, (*string)(nil)},
 	"testmempoolaccept":     {(*[]btcjson.TestMempoolAcceptResult)(nil)},
+	"unparkblock":           nil,
 	"uptime":                {(*int64)(nil)},
 	"validateaddress":       {(*btcjson.ValidateAddressChainResult)(nil)},
 	"verifychain":           {(*bool)(nil)},

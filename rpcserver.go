@@ -189,6 +189,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"help":                  handleHelp,
 	"invalidateblock":       handleInvalidateBlock,
 	"node":                  handleNode,
+	"parkblock":             handleParkBlock,
 	"ping":                  handlePing,
 	"reconsiderblock":       handleReconsiderBlock,
 	"searchrawtransactions": handleSearchRawTransactions,
@@ -197,6 +198,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"stop":                  handleStop,
 	"submitblock":           handleSubmitBlock,
 	"testmempoolaccept":     handleTestMempoolAccept,
+	"unparkblock":           handleUnparkBlock,
 	"uptime":                handleUptime,
 	"validateaddress":       handleValidateAddress,
 	"verifychain":           handleVerifyChain,
@@ -4309,6 +4311,40 @@ func handleInvalidateBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan s
 	}
 
 	return nil, s.cfg.Chain.InvalidateBlock(hash)
+}
+
+// handleParkBlock implements the parkblock command.
+func handleParkBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.ParkBlockCmd)
+	return nil, parkOrUnparkBlock(s, c.BlockHash, s.cfg.Chain.ParkBlock)
+}
+
+// handleUnparkBlock implements the unparkblock command.
+func handleUnparkBlock(s *rpcServer, cmd interface{}, closeNotifier <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.UnparkBlockCmd)
+	return nil, parkOrUnparkBlock(s, c.BlockHash, s.cfg.Chain.UnparkBlock)
+}
+
+// parkOrUnparkBlock applies park, which parks or unparks a block, to the
+// block with the given hash.
+func parkOrUnparkBlock(s *rpcServer, blockHash string, park func(*chainhash.Hash) error) error {
+	hash, err := chainhash.NewHashFromStr(blockHash)
+	if err != nil {
+		return rpcDecodeHexError(blockHash)
+	}
+	if _, err := s.cfg.Chain.HeaderByHash(hash); err != nil {
+		return &btcjson.RPCError{
+			Code:    btcjson.ErrRPCBlockNotFound,
+			Message: "Block not found",
+		}
+	}
+	if err := park(hash); err != nil {
+		return &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDatabase,
+			Message: err.Error(),
+		}
+	}
+	return nil
 }
 
 // handleFinalizeBlock implements the finalizeblock command.

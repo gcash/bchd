@@ -956,6 +956,32 @@ func NewInvalidateBlockCmd(blockHash string) *InvalidateBlockCmd {
 	}
 }
 
+// ParkBlockCmd defines the parkblock JSON-RPC command.
+type ParkBlockCmd struct {
+	BlockHash string
+}
+
+// NewParkBlockCmd returns a new instance which can be used to issue a
+// parkblock JSON-RPC command.
+func NewParkBlockCmd(blockHash string) *ParkBlockCmd {
+	return &ParkBlockCmd{
+		BlockHash: blockHash,
+	}
+}
+
+// UnparkBlockCmd defines the unparkblock JSON-RPC command.
+type UnparkBlockCmd struct {
+	BlockHash string
+}
+
+// NewUnparkBlockCmd returns a new instance which can be used to issue an
+// unparkblock JSON-RPC command.
+func NewUnparkBlockCmd(blockHash string) *UnparkBlockCmd {
+	return &UnparkBlockCmd{
+		BlockHash: blockHash,
+	}
+}
+
 // PingCmd defines the ping JSON-RPC command.
 type PingCmd struct{}
 
@@ -1225,6 +1251,7 @@ func init() {
 	MustRegisterCmd("getwork", (*GetWorkCmd)(nil), flags)
 	MustRegisterCmd("help", (*HelpCmd)(nil), flags)
 	MustRegisterCmd("invalidateblock", (*InvalidateBlockCmd)(nil), flags)
+	MustRegisterCmd("parkblock", (*ParkBlockCmd)(nil), flags)
 	MustRegisterCmd("ping", (*PingCmd)(nil), flags)
 	MustRegisterCmd("preciousblock", (*PreciousBlockCmd)(nil), flags)
 	MustRegisterCmd("reconsiderblock", (*ReconsiderBlockCmd)(nil), flags)
@@ -1234,6 +1261,7 @@ func init() {
 	MustRegisterCmd("stop", (*StopCmd)(nil), flags)
 	MustRegisterCmd("submitblock", (*SubmitBlockCmd)(nil), flags)
 	MustRegisterCmd("testmempoolaccept", (*TestMempoolAcceptCmd)(nil), flags)
+	MustRegisterCmd("unparkblock", (*UnparkBlockCmd)(nil), flags)
 	MustRegisterCmd("uptime", (*UptimeCmd)(nil), flags)
 	MustRegisterCmd("validateaddress", (*ValidateAddressCmd)(nil), flags)
 	MustRegisterCmd("verifychain", (*VerifyChainCmd)(nil), flags)
