@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -208,6 +209,12 @@ type BlockChain struct {
 	maxReorgDepth     int32
 	finalizationDelay time.Duration
 	startTime         int64
+
+	// parkDeepReorg parks a block that would reorganize the chain more
+	// than one block deep, and automaticUnparking unparks its chain once
+	// it has enough work.
+	parkDeepReorg      bool
+	automaticUnparking bool
 
 	// upgrade2027ActivationTime is the network's activation time of the
 	// 1-minute block upgrade, or its override.
@@ -1452,6 +1459,17 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 	// most common case.
 	parentHash := &block.MsgBlock().Header.PrevBlock
 	if parentHash.IsEqual(&b.bestChain.Tip().hash) {
+		// A parked block extends the tip only once it is unparked,
+		// which needs no more work than its own while unparking is
+		// automatic.
+		if b.index.NodeStatus(node).Parked() {
+			attachNodes := list.New()
+			attachNodes.PushBack(node)
+			if !b.parkedChainUsable(node, b.bestChain.Tip(), attachNodes) {
+				return false, nil
+			}
+		}
+
 		// Skip checks if node has already been fully validated.
 		fastAdd = fastAdd || b.index.NodeStatus(node).KnownValid()
 
@@ -1557,6 +1575,15 @@ func (b *BlockChain) connectBestChain(node *blockNode, block *bchutil.Block, fla
 		if writeErr := b.index.flushToDB(); writeErr != nil {
 			log.Warnf("Error flushing block index changes to disk: %v", writeErr)
 		}
+		return false, nil
+	}
+
+	// A chain with a parked block stays off the main chain unless it has
+	// enough work to be unparked.  This is not an error, as the block is
+	// valid as far as is known.
+	fork := attachNodes.Front().Value.(*blockNode).parent
+	if !b.parkedChainUsable(node, fork, attachNodes) {
+		flushIndexState()
 		return false, nil
 	}
 
@@ -2091,7 +2118,10 @@ func (b *BlockChain) locateHeaders(locator BlockLocator, hashStop *chainhash.Has
 	return headers
 }
 
-// InvalidateBlock takes a block hash and invalidates it.
+// InvalidateBlock takes a block hash and invalidates it.  When the block is
+// in the main chain, the main chain is disconnected down to its parent, and
+// the chain with the most work the node has is then connected, as in Bitcoin
+// Cash Node.
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) InvalidateBlock(hash *chainhash.Hash) error {
@@ -2123,7 +2153,6 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 	}
 
 	b.chainLock.Lock()
-	defer b.chainLock.Unlock()
 
 	// The block is marked before the reorganization, which releases the
 	// chain lock while it sends notifications, so that headers arriving
@@ -2146,6 +2175,7 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 			if writeErr := b.index.flushToDB(); writeErr != nil {
 				log.Warnf("Error flushing block index changes to disk: %v", writeErr)
 			}
+			b.chainLock.Unlock()
 			return err
 		}
 	}
@@ -2155,12 +2185,16 @@ func (b *BlockChain) invalidateBlock(hash *chainhash.Hash) error {
 		b.index.SetStatusFlags(n, statusInvalidAncestor)
 		b.index.UnsetStatusFlags(n, statusValid)
 	}
+	b.chainLock.Unlock()
+
+	// Another chain can have more work than the main chain now.
+	err := b.reorganizeToBestKnown()
 
 	if writeErr := b.index.flushToDB(); writeErr != nil {
 		log.Warnf("Error flushing block index changes to disk: %v", writeErr)
 	}
 
-	return nil
+	return err
 }
 
 // ReconsiderBlock takes a block hash and allows it to be revalidated.
@@ -2244,9 +2278,38 @@ func (b *BlockChain) reconsiderBlock(hash *chainhash.Hash) error {
 	return err
 }
 
+// reorganizeToBestKnown makes the chain with the most work the node has
+// stored the main chain, if it has more work than the main chain, as Bitcoin
+// Cash Node chooses its chain again among all blocks once a block is
+// invalidated or parked.  A chain found invalid is passed over for the next.
+//
+// This function MUST be called with processLock held.
+func (b *BlockChain) reorganizeToBestKnown() error {
+	tips := b.index.tipsAbove(b.bestChain.Tip())
+	for len(tips) > 0 {
+		err := b.reorganizeToBest(tips)
+		var ruleErr RuleError
+		if !errors.As(err, &ruleErr) {
+			return err
+		}
+		log.Infof("Not switching to a chain with an invalid block: %v",
+			err)
+
+		// The invalid block is marked, so its chain is left out now.
+		previous := tips
+		tips = b.index.tipsAbove(b.bestChain.Tip())
+		if slices.Equal(tips, previous) {
+			return err
+		}
+	}
+	return nil
+}
+
 // reorganizeToBest makes the candidate with the most work the tip of the main
 // chain, if it has more work than the tip, its data, and no invalid ancestor.
-// At equal work the first one wins.
+// At equal work the first one wins.  A candidate that forks the chain below
+// the finalized block, has a parked block it can't unpark, or lacks the data
+// of a block is passed over for the next one.
 //
 // This function MUST be called with processLock held.
 func (b *BlockChain) reorganizeToBest(candidates []*blockNode) error {
@@ -2254,28 +2317,45 @@ func (b *BlockChain) reorganizeToBest(candidates []*blockNode) error {
 	defer b.chainLock.Unlock()
 
 	tip := b.bestChain.Tip()
-	best := tip
+	var better []*blockNode
 	for _, n := range candidates {
 		status := b.index.NodeStatus(n)
 		if status.HaveData() && !status.KnownInvalid() &&
-			n.workSum.Cmp(best.workSum) > 0 {
+			n.workSum.Cmp(tip.workSum) > 0 {
 
-			best = n
+			better = append(better, n)
 		}
 	}
-	if best == tip {
-		return nil
-	}
+	slices.SortStableFunc(better, func(x, y *blockNode) int {
+		return y.workSum.Cmp(x.workSum)
+	})
 
-	detachNodes, attachNodes := b.getReorganizeNodes(best)
-	if attachNodes.Len() == 0 {
-		return nil
+	for _, n := range better {
+		// Such a chain can only come back once finalization moves
+		// back, and is not marked invalid, as it was valid when stored.
+		if b.forksBeforeFinalized(n) {
+			log.Debugf("Not switching to block %v, which forks the "+
+				"chain below the finalized block", n.hash)
+			continue
+		}
+		detachNodes, attachNodes := b.getReorganizeNodes(n)
+		if attachNodes.Len() == 0 {
+			continue
+		}
+		fork := attachNodes.Front().Value.(*blockNode).parent
+		if !b.parkedChainUsable(n, fork, attachNodes) {
+			continue
+		}
+		pruned, err := b.prunedNode(attachNodes)
+		if err != nil {
+			return err
+		}
+		if pruned != nil {
+			continue
+		}
+		return b.reorganizeChain(detachNodes, attachNodes)
 	}
-	pruned, err := b.prunedNode(attachNodes)
-	if err != nil || pruned != nil {
-		return err
-	}
-	return b.reorganizeChain(detachNodes, attachNodes)
+	return nil
 }
 
 // Prune deletes the block data and spend journals for all blocks deeper than
@@ -2778,6 +2858,15 @@ type Config struct {
 	// DefaultFinalizationDelay.
 	FinalizationDelay time.Duration
 
+	// NoParkDeepReorg turns off parking a block that would reorganize the
+	// chain more than one block deep, so that such a block is connected
+	// by most work alone.  Blocks parked before stay parked.
+	NoParkDeepReorg bool
+
+	// NoAutomaticUnparking turns off unparking a parked chain once it has
+	// enough more work than the main chain, so that it stays parked.
+	NoAutomaticUnparking bool
+
 	// Upgrade2027ActivationTime, when not nil, replaces the network's
 	// Upgrade2027ActivationTime.  The caller checks that it is not before
 	// the network's ASERT anchor.
@@ -2895,6 +2984,8 @@ func New(config *Config) (*BlockChain, error) {
 		maxReorgDepth:       config.MaxReorgDepth,
 		finalizationDelay:   config.FinalizationDelay,
 		startTime:           time.Now().Unix(),
+		parkDeepReorg:       !config.NoParkDeepReorg,
+		automaticUnparking:  !config.NoAutomaticUnparking,
 	}
 	if b.maxReorgDepth == 0 {
 		b.maxReorgDepth = DefaultMaxReorgDepth
@@ -3080,6 +3171,18 @@ func New(config *Config) (*BlockChain, error) {
 		log.Infof("Blocks %d deep are finalized once known for %v, and "+
 			"blocks forking the chain below them are rejected",
 			b.maxReorgDepth, b.finalizationDelay)
+	}
+	switch {
+	case b.parkDeepReorg && b.automaticUnparking:
+		log.Info("Blocks that would reorganize the chain more than one " +
+			"block deep are parked until their chain has enough work")
+	case b.parkDeepReorg:
+		log.Info("Blocks that would reorganize the chain more than one " +
+			"block deep are parked, and automatic unparking is disabled")
+	case b.automaticUnparking:
+		log.Info("Block parking is disabled")
+	default:
+		log.Info("Block parking and automatic unparking are disabled")
 	}
 
 	log.Infof("Chain state (height %d, hash %v, totaltx %d, work %v)",

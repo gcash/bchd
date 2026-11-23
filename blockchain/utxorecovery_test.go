@@ -404,8 +404,10 @@ func TestUtxoRecoveryAfterReorgPruned(t *testing.T) {
 		t.Fatalf("flush: %v", err)
 	}
 	newSpend := ruleTestSpend(shared, value-1000, 2)
-	mine(2, 4, newSpend)
-	if chain.BestSnapshot().Height != 5 {
+
+	// The new branch takes 5 blocks to replace the 3 parked against.
+	mine(2, 5, newSpend)
+	if chain.BestSnapshot().Height != 6 {
 		t.Fatal("chain did not reorganize")
 	}
 	db.Close()

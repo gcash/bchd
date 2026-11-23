@@ -74,6 +74,12 @@ func TestReorgPrunedSideChain(t *testing.T) {
 				prev = block.MsgBlock()
 			}
 
+			// The side chain forks 2 blocks deep, so it is parked.
+			sideNode := chain.index.LookupNode(side[0].Hash())
+			if !chain.index.NodeStatus(sideNode).Parked() {
+				t.Fatal("side chain not parked")
+			}
+
 			switch test.damage {
 			case "side":
 				pruneBlockData(t, db, side[1].Hash())
@@ -124,6 +130,12 @@ func TestReorgPrunedSideChain(t *testing.T) {
 			}
 			if chain.index.LookupNode(next.Hash()) == nil {
 				t.Fatal("the block on the pruned side chain was not stored")
+			}
+
+			// It has the work to be unparked, which is checked before
+			// its data, as in Bitcoin Cash Node.
+			if chain.index.NodeStatus(sideNode).Parked() {
+				t.Fatal("side chain still parked")
 			}
 		})
 	}

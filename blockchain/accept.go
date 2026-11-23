@@ -88,6 +88,18 @@ func (b *BlockChain) maybeAcceptBlock(block *bchutil.Block, prevHash *chainhash.
 		newNode.status = statusDataStored
 		newNode.received = uint32(time.Now().Unix())
 
+		// A block whose chain would take more than one block off the
+		// main chain is parked, as in Bitcoin Cash Node, so that its
+		// chain only replaces the main chain with enough more work.
+		if b.parkDeepReorg {
+			fork := b.bestChain.FindFork(prevNode)
+			if fork.height+1 < b.bestChain.Tip().height {
+				newNode.status |= statusParked
+				log.Infof("Park block %v as it would cause a deep "+
+					"reorg", newNode.hash)
+			}
+		}
+
 		b.index.AddNode(newNode)
 	}
 	err = b.index.flushToDB()

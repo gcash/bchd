@@ -1647,6 +1647,17 @@ func (b *BlockChain) initChainState(fastSync bool) error {
 
 				b.index.SetStatusFlags(iterNode, statusValid)
 			}
+
+			// No main chain block is parked.  Blocks off it keep
+			// their flags, as the stored tip is kept rather than
+			// chosen again.
+			if iterNode.status.Parked() {
+				log.Debugf("Block %v (height=%v) ancestor of "+
+					"chain tip is parked, unparking it for "+
+					"consistency", iterNode.hash, iterNode.height)
+
+				b.index.UnsetStatusFlags(iterNode, statusParked)
+			}
 		}
 
 		// Initialize the state related to the best block.

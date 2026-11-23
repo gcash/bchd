@@ -4,7 +4,10 @@
 
 package blockchain
 
-import "math/big"
+import (
+	"container/list"
+	"math/big"
+)
 
 const (
 	// parkingLockInTicks is how far, in ticks, the tip may be past the
@@ -66,4 +69,50 @@ func parkedChainHasEnoughWorkToUnpark(tip, fork, candidate *blockNode) bool {
 		required = legacyUnparkRequiredWork(tip, fork)
 	}
 	return candidate.workSum.Cmp(required) > 0
+}
+
+// parkedChainUsable returns whether the main chain can switch to the chain
+// ending at node, which forks it at fork and attaches attachNodes, as far as
+// parking goes.  A chain with a parked block is unparked when automatic
+// unparking is on and it has enough work, as in Bitcoin Cash Node, and is
+// refused otherwise.  Nodes unparked here are not flushed.
+//
+// This function MUST be called with the chain state lock held (for writes).
+func (b *BlockChain) parkedChainUsable(node, fork *blockNode, attachNodes *list.List) bool {
+	parked := false
+	for e := attachNodes.Front(); e != nil && !parked; e = e.Next() {
+		parked = b.index.NodeStatus(e.Value.(*blockNode)).Parked()
+	}
+	if !parked {
+		return true
+	}
+
+	tip := b.bestChain.Tip()
+	if !b.automaticUnparking ||
+		!parkedChainHasEnoughWorkToUnpark(tip, fork, node) {
+
+		log.Infof("Considered switching to better tip %v but that "+
+			"chain contains a parked block", node.hash)
+		return false
+	}
+
+	log.Infof("Unpark chain up to block %v as it has accumulated enough "+
+		"PoW", node.hash)
+	b.unparkNodes(attachNodes)
+	return true
+}
+
+// unparkNodes unparks the parked nodes of the list and returns them.
+//
+// This function MUST be called with the chain state lock held (for writes).
+func (b *BlockChain) unparkNodes(nodes *list.List) []*blockNode {
+	var unparked []*blockNode
+	for e := nodes.Front(); e != nil; e = e.Next() {
+		n := e.Value.(*blockNode)
+		if b.index.NodeStatus(n).Parked() {
+			b.index.UnsetStatusFlags(n, statusParked)
+			unparked = append(unparked, n)
+		}
+	}
+	return unparked
 }

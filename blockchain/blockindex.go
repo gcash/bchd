@@ -36,6 +36,12 @@ const (
 	// has failed validation, thus the block is also invalid.
 	statusInvalidAncestor
 
+	// statusParked indicates that the block would have caused a deep
+	// reorganization when it was received, or was parked by hand, so the
+	// chain through it is not connected until it has enough work to be
+	// unparked.  It is independent of the validation state.
+	statusParked
+
 	// statusNone indicates that the block has no validation state flags set.
 	//
 	// NOTE: This must be defined last in order to avoid influencing iota.
@@ -61,6 +67,12 @@ func (status blockStatus) KnownValid() bool {
 // invalid yet.
 func (status blockStatus) KnownInvalid() bool {
 	return status&(statusValidateFailed|statusInvalidAncestor) != 0
+}
+
+// Parked returns whether the block is parked.  A block whose ancestor is
+// parked is on a parked chain without being parked itself.
+func (status blockStatus) Parked() bool {
+	return status&statusParked != 0
 }
 
 // blockNode represents a block within the block chain and is primarily used to
@@ -368,6 +380,36 @@ func (bi *blockIndex) AddNode(node *blockNode) {
 // This function is NOT safe for concurrent access.
 func (bi *blockIndex) addNode(node *blockNode) {
 	bi.index[node.hash] = node
+}
+
+// tipsAbove returns the nodes of the index with their data, not known to be
+// invalid and with more work than node, on which no other such node builds,
+// in the order they were received.  It reads every node of the index.
+//
+// This function is safe for concurrent access.
+func (bi *blockIndex) tipsAbove(node *blockNode) []*blockNode {
+	bi.RLock()
+	defer bi.RUnlock()
+
+	var above []*blockNode
+	built := make(map[*blockNode]struct{})
+	for _, n := range bi.index {
+		if n.status.HaveData() && !n.status.KnownInvalid() &&
+			n.workSum.Cmp(node.workSum) > 0 {
+
+			above = append(above, n)
+			built[n.parent] = struct{}{}
+		}
+	}
+	above = slices.DeleteFunc(above, func(n *blockNode) bool {
+		_, ok := built[n]
+		return ok
+	})
+	slices.SortFunc(above, func(a, b *blockNode) int {
+		return cmp.Or(cmp.Compare(a.received, b.received),
+			bytes.Compare(a.hash[:], b.hash[:]))
+	})
+	return above
 }
 
 // descendants returns the nodes of the index that build on node, lowest first

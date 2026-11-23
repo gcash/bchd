@@ -55,7 +55,10 @@ func isSupportedDbType(dbType string) bool {
 // chainSetup is used to create a new db and chain instance with the genesis
 // block already inserted.  In addition to the new chain instance, it returns
 // a teardown function the caller should invoke when done testing to clean up.
-func chainSetup(dbName string, params *chaincfg.Params, excessiveBlockSize uint32) (*blockchain.BlockChain, func(), error) {
+// The passed functions can change the chain's configuration.
+func chainSetup(dbName string, params *chaincfg.Params, excessiveBlockSize uint32,
+	configure ...func(*blockchain.Config)) (*blockchain.BlockChain, func(), error) {
+
 	if !isSupportedDbType(testDbType) {
 		return nil, nil, fmt.Errorf("unsupported db type %v", testDbType)
 	}
@@ -109,7 +112,7 @@ func chainSetup(dbName string, params *chaincfg.Params, excessiveBlockSize uint3
 	paramsCopy := *params
 
 	// Create the main chain instance.
-	chain, err := blockchain.New(&blockchain.Config{
+	config := &blockchain.Config{
 		DB:                 db,
 		ChainParams:        &paramsCopy,
 		Checkpoints:        nil,
@@ -117,7 +120,11 @@ func chainSetup(dbName string, params *chaincfg.Params, excessiveBlockSize uint3
 		SigCache:           txscript.NewSigCache(1000),
 		UtxoCacheMaxSize:   250 * 1024 * 1024,
 		ExcessiveBlockSize: excessiveBlockSize,
-	})
+	}
+	for _, f := range configure {
+		f(config)
+	}
+	chain, err := blockchain.New(config)
 	if err != nil {
 		teardown()
 		err := fmt.Errorf("failed to create chain instance: %v", err)
@@ -324,8 +331,13 @@ func TestCTORActivation(t *testing.T) {
 	params := chaincfg.RegressionNetParams
 	params.MagneticAnonomalyForkHeight = 0
 	params.Upgrade9ForkHeight = 100000000
+
+	// The tests reorganize the chain 4 blocks deep with one block more,
+	// which parking would refuse.
 	chain, teardownFunc, err := chainSetup("fullblocktest",
-		&params, 1000000)
+		&params, 1000000, func(c *blockchain.Config) {
+			c.NoParkDeepReorg = true
+		})
 	if err != nil {
 		t.Errorf("Failed to setup chain instance: %v", err)
 		return

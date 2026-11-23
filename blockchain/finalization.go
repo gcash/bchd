@@ -156,8 +156,9 @@ func (b *BlockChain) FinalizedBlockHash() *chainhash.Hash {
 // FinalizeBlock finalizes the block with the given hash, so that blocks
 // forking the chain below it are rejected.  When the block is not in the main
 // chain, the main chain is disconnected down to the fork point, its first
-// block there is marked invalid and the block's chain is connected up to the
-// block.  A block that conflicts with the finalized block is refused.
+// block there is marked invalid and the block's chain is unparked and
+// connected up to the block, then on to the best chain built on it.  A block
+// that conflicts with the finalized block is refused.
 //
 // This function is safe for concurrent access.
 func (b *BlockChain) FinalizeBlock(hash *chainhash.Hash) error {
@@ -168,30 +169,53 @@ func (b *BlockChain) FinalizeBlock(hash *chainhash.Hash) error {
 
 	b.processLock.Lock()
 	defer b.processLock.Unlock()
+
+	switched, err := b.finalizeBlock(node)
+	if err != nil || !switched {
+		return err
+	}
+
+	// The blocks built on it can make a better chain, whose parked blocks
+	// are unparked at once, as in Bitcoin Cash Node, since the main chain
+	// then has no work past the fork.
+	err = b.reorganizeToBest(b.index.descendants(node))
+
+	if writeErr := b.index.flushToDB(); writeErr != nil {
+		log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+	}
+	return err
+}
+
+// finalizeBlock finalizes the node for FinalizeBlock and returns whether the
+// main chain switched to its chain.
+//
+// This function MUST be called with processLock held.
+func (b *BlockChain) finalizeBlock(node *blockNode) (bool, error) {
+	hash := &node.hash
 	b.chainLock.Lock()
 	defer b.chainLock.Unlock()
 
 	if b.index.NodeStatus(node).KnownInvalid() {
-		return fmt.Errorf("block %s is invalid", hash)
+		return false, fmt.Errorf("block %s is invalid", hash)
 	}
 	fin := b.finalizedNode
 	if fin != nil && !onSameFork(node, fin) {
-		return fmt.Errorf("block %s conflicts with the finalized block %s",
-			hash, fin.hash)
+		return false, fmt.Errorf("block %s conflicts with the "+
+			"finalized block %s", hash, fin.hash)
 	}
 	if fin != nil && node.height <= fin.height {
-		return nil
+		return false, nil
 	}
 
 	if b.bestChain.Contains(node) {
 		log.Infof("Finalized block %v (height %d)", node.hash, node.height)
 		b.finalizedNode = node
-		return nil
+		return false, nil
 	}
 
 	detachNodes, attachNodes := b.getReorganizeNodes(node)
 	if attachNodes.Len() == 0 {
-		return fmt.Errorf("block %s is invalid", hash)
+		return false, fmt.Errorf("block %s is invalid", hash)
 	}
 
 	// Finalize the block and invalidate the chain being detached before
@@ -212,8 +236,21 @@ func (b *BlockChain) FinalizeBlock(hash *chainhash.Hash) error {
 	}
 	b.finalizedNode = node
 
+	// The block's chain is unparked, as in Bitcoin Cash Node, since it
+	// becomes the main chain whatever its work.
+	unparked := b.unparkNodes(attachNodes)
+	if len(unparked) > 0 {
+		log.Debugf("Unparked the chain up to block %v to finalize it",
+			node.hash)
+	}
+
 	if err := b.reorganizeChain(detachNodes, attachNodes); err != nil {
 		b.finalizedNode = fin
+		for _, n := range unparked {
+			if !b.bestChain.Contains(n) {
+				b.index.SetStatusFlags(n, statusParked)
+			}
+		}
 		i := 0
 		for e := detachNodes.Front(); e != nil; e, i = e.Next(), i+1 {
 			n := e.Value.(*blockNode)
@@ -225,12 +262,12 @@ func (b *BlockChain) FinalizeBlock(hash *chainhash.Hash) error {
 		if writeErr := b.index.flushToDB(); writeErr != nil {
 			log.Warnf("Error flushing block index changes to disk: %v", writeErr)
 		}
-		return err
+		return false, err
 	}
 	if err := b.index.flushToDB(); err != nil {
 		log.Warnf("Error flushing block index changes to disk: %v", err)
 	}
 
 	log.Infof("Finalized block %v (height %d)", node.hash, node.height)
-	return nil
+	return true, nil
 }

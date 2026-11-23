@@ -127,7 +127,8 @@ func TestChainChangeDuringNotification(t *testing.T) {
 
 	// Finalizing a block that a reorganization is about to disconnect
 	// waits for the reorganization, and then takes the chain back to the
-	// block, so that the finalized block stays in the main chain.
+	// block, so that the finalized block stays in the main chain, and on to
+	// the block built on it.
 	t.Run("finalize during a reorganization", func(t *testing.T) {
 		chain, blocks := finalizationTestChain(t, -1, time.Hour)
 		params := chain.chainParams
@@ -147,8 +148,9 @@ func TestChainChangeDuringNotification(t *testing.T) {
 		changeDuringNotification(t, chain, block, NTBlockDisconnected, blocks[5], func() error {
 			return chain.FinalizeBlock(blocks[4].Hash())
 		})
-		if tip := chain.bestChain.Tip(); tip.hash != *blocks[4].Hash() {
-			t.Fatalf("tip %v, want the finalized block 4", tip.hash)
+		if tip := chain.bestChain.Tip(); tip.hash != *blocks[5].Hash() {
+			t.Fatalf("tip %v, want block 5 on the finalized block 4",
+				tip.hash)
 		}
 	})
 }
