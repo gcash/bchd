@@ -499,8 +499,10 @@ func testGenerateAndSubmitBlockWithCustomCoinbaseOutputs(r *Harness,
 
 func testMemWalletReorg(r *Harness, t *testing.T) {
 	// Create a fresh harness, we'll be using the main harness to force a
-	// re-org on this local harness.
-	harness, err := New(&chaincfg.SimNetParams, nil, nil)
+	// re-org on this local harness.  The main harness's chain forks near
+	// genesis without twice the work, which parking would refuse.
+	harness, err := New(&chaincfg.SimNetParams, nil,
+		[]string{"--noparkdeepreorg"})
 	if err != nil {
 		t.Fatal(err)
 	}

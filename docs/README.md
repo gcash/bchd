@@ -7,6 +7,7 @@
    2. [Configuration](#Configuration)
       1. [Checkpoints and Initial Block Download](#Checkpoints)
       2. [Finalization and Deep Reorganizations](#Finalization)
+      3. [Block Parking](#Parking)
    3. [Controlling and Querying bchd via bchctl](#BchctlConfig)
    4. [Mining](#Mining)
    5. [Kubernetes](#Kubernetes)
@@ -158,6 +159,52 @@ it can only be used to switch to the other chain once finalization has moved
 back, for example after step 1 or a restart. Calling `reconsiderblock` on a
 block that was invalidated earlier also moves finalization back to the point
 where that block's chain forks.
+
+A split that is not yet as deep as the finalized block leaves the other
+chain's blocks stored but parked (see [Block Parking](#Parking)) until that
+chain has enough work. To switch to it sooner, call `invalidateblock` with the
+first block of the node's chain after the fork point: the other chain is then
+unparked and connected at once, since the node's chain has no work since the
+fork.
+
+<a name="Parking" />
+
+**2.2.3 Block Parking**
+
+Like Bitcoin Cash Node, bchd parks a block whose chain would take more than one
+block off the main chain. The block is stored, but its chain only replaces the
+main chain once it has enough more proof of work than the main chain has since
+the fork:
+
+- Before the upgrade to 1-minute blocks: one block more when the main chain is
+  2 blocks past the fork, two more at 3 blocks, and more than twice the work
+  from 4 blocks on.
+- After it: more than an eighth more work while the main chain is less than
+  2,400 ticks past the fork, which is 40 one-minute blocks, and more than
+  twice the work from there on.
+
+The depth at which a block is parked is counted in blocks, also after the
+upgrade, so a block racing the tip is not parked, and one more block on top of
+it replaces the main chain as before. With the default finalization depth of
+100 one-minute blocks, a fork from 40 to 100 blocks deep needs twice the work,
+and one below the finalized block is rejected. Parking is node policy, not a
+consensus rule.
+
+Parking can be turned off, so that the chain with the most work is followed
+however deep the fork, and automatic unparking can be turned off, so that a
+parked chain stays parked whatever its work:
+
+```
+[Application Options]
+noparkdeepreorg=1
+noautomaticunparking=1
+```
+
+Blocks parked before `noparkdeepreorg` was set stay parked until their chain
+has enough work. Unlike Bitcoin Cash Node, bchd does not choose its chain again
+when it starts, so a parked chain that already has enough work when the node
+starts with automatic unparking turned back on is connected when its next
+block arrives.
 
 <a name="BchctlConfig" />
 

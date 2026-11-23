@@ -28,7 +28,10 @@ import (
 // neither fetch nor store the fork's block, which it fetched when announced and
 // stored though its chain had less work.
 func TestCompetingChains(t *testing.T) {
-	h1, err := rpctest.New(&chaincfg.SimNetParams, nil, nil)
+	// The competing chain forks at genesis with half again as many blocks,
+	// which parking would refuse.
+	h1, err := rpctest.New(&chaincfg.SimNetParams, nil,
+		[]string{"--noparkdeepreorg"})
 	if err != nil {
 		t.Fatal(err)
 	}

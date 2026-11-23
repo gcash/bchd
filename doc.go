@@ -136,6 +136,11 @@ Application Options:
 	    --finalizationdelay=         Time in seconds a block must have been
 	                                 known, and the node running, before the
 	                                 block can be finalized (default: 7200)
+	    --noparkdeepreorg            Do not park a block that would cause a
+	                                 reorganization deeper than one block; such
+	                                 blocks are connected by most work alone
+	    --noautomaticunparking       Do not unpark a parked chain when it gains
+	                                 enough proof of work, so it stays parked
 	    --upgrade2027activationtime= Median time past, in seconds since the
 	                                 epoch, at which the May 2027 upgrade to
 	                                 1-minute blocks activates, for testing --
