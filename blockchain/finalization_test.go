@@ -517,12 +517,9 @@ func TestFinalizationSeam(t *testing.T) {
 	}
 }
 
-// finalizationVectorFile is the part of the CHIP-2025-03 parking and
-// finalization vectors that finalization uses.
-type finalizationVectorFile struct {
-	Constants struct {
-		FinalizationDepthTicks string `json:"FINALIZATION_DEPTH_TICKS"`
-	} `json:"constants"`
+// chipVectorFile holds the CHIP-2025-03 parking and finalization vectors.
+type chipVectorFile struct {
+	Constants map[string]string `json:"constants"`
 	Schedules []struct {
 		Name     string `json:"name"`
 		Schedule []struct {
@@ -530,6 +527,24 @@ type finalizationVectorFile struct {
 			Tau    string `json:"tau"`
 		} `json:"schedule"`
 	} `json:"schedules"`
+	Parking []struct {
+		Name                   string `json:"name"`
+		Schedule               string `json:"schedule"`
+		Fork                   string `json:"fork"`
+		DefenderTip            string `json:"defenderTip"`
+		TickDepth              string `json:"tickDepth"`
+		ForkChainWork          string `json:"forkChainWork"`
+		TipChainWork           string `json:"tipChainWork"`
+		CompetingChainWork     string `json:"competingChainWork"`
+		WorkSinceFork          string `json:"workSinceFork"`
+		CompetingWorkSinceFork string `json:"competingWorkSinceFork"`
+		Penalty                string `json:"penalty"`
+		RequiredWork           string `json:"requiredWork"`
+		PenaltyNum             string `json:"penaltyNum"`
+		PenaltyDen             string `json:"penaltyDen"`
+		SlackVsThreshold       string `json:"slackVsThreshold"`
+		Accept                 bool   `json:"accept"`
+	} `json:"parking"`
 	Finalization []struct {
 		Name              string `json:"name"`
 		Schedule          string `json:"schedule"`
@@ -546,47 +561,80 @@ type finalizationVectorFile struct {
 	} `json:"finalization"`
 }
 
-// TestFinalizationVectors runs the finalization vectors of CHIP-2025-03
-// (fablous tests/parking_finalization).  Their schedules give the height
-// after which blocks have another interval, also intervals other than 60.
-// Blocks not listed as received are loaded from disk.
-func TestFinalizationVectors(t *testing.T) {
+// scheduleChange is an entry of a vector schedule: the blocks after height
+// are tau ticks apart.
+type scheduleChange struct{ height, tau int32 }
+
+// loadCHIPVectors reads the CHIP-2025-03 parking and finalization vectors
+// (fablous tests/parking_finalization) and returns them with their schedules
+// by name.  The empty schedule has no entries.
+func loadCHIPVectors(t *testing.T) (*chipVectorFile, map[string][]scheduleChange) {
+	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "chip202503",
 		"parking_finalization", "parking_finalization.json"))
 	if err != nil {
 		t.Fatalf("read vectors: %v", err)
 	}
-	var vectors finalizationVectorFile
+	var vectors chipVectorFile
 	if err := json.Unmarshal(data, &vectors); err != nil {
 		t.Fatalf("parse vectors: %v", err)
 	}
-	parse := func(s string) int32 {
-		v, err := strconv.ParseInt(s, 10, 32)
-		if err != nil {
-			t.Fatalf("bad number %q: %v", s, err)
+	schedules := make(map[string][]scheduleChange)
+	for _, s := range vectors.Schedules {
+		schedules[s.Name] = []scheduleChange{}
+		for _, c := range s.Schedule {
+			schedules[s.Name] = append(schedules[s.Name],
+				scheduleChange{vectorInt32(t, c.Height),
+					vectorInt32(t, c.Tau)})
 		}
-		return int32(v)
 	}
+	return &vectors, schedules
+}
+
+// vectorInt32 parses a decimal number of the vectors.
+func vectorInt32(t *testing.T, s string) int32 {
+	t.Helper()
+	v, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		t.Fatalf("bad number %q: %v", s, err)
+	}
+	return int32(v)
+}
+
+// scheduledNodes returns fake nodes from genesis up to height tip, whose
+// intervals follow the passed schedule, indexed by height.
+func scheduledNodes(genesis *blockNode, sched []scheduleChange, tip int32) []*blockNode {
+	nodes := []*blockNode{genesis}
+	for h := int32(1); h <= tip; h++ {
+		parent := nodes[h-1]
+		for _, c := range sched {
+			if parent.height >= c.height {
+				parent.nextInterval = uint16(c.tau)
+			}
+		}
+		nodes = append(nodes, newFakeNode(parent, 1, 0,
+			time.Unix(int64(h), 0)))
+	}
+	return nodes
+}
+
+// TestFinalizationVectors runs the finalization vectors of CHIP-2025-03
+// (fablous tests/parking_finalization).  Their schedules give the height
+// after which blocks have another interval, also intervals other than 60.
+// Blocks not listed as received are loaded from disk.
+func TestFinalizationVectors(t *testing.T) {
+	vectors, schedules := loadCHIPVectors(t)
+	parse := func(s string) int32 { return vectorInt32(t, s) }
 	height := func(s string) int32 {
 		if s == "none" {
 			return -1
 		}
 		return parse(s)
 	}
-	if vectors.Constants.FinalizationDepthTicks !=
+	if depth := vectors.Constants["FINALIZATION_DEPTH_TICKS"]; depth !=
 		strconv.Itoa(DefaultMaxReorgDepth*legacyBlockInterval) {
 
-		t.Fatalf("finalization depth %s ticks",
-			vectors.Constants.FinalizationDepthTicks)
-	}
-
-	type change struct{ height, tau int32 }
-	schedules := make(map[string][]change)
-	for _, s := range vectors.Schedules {
-		for _, c := range s.Schedule {
-			schedules[s.Name] = append(schedules[s.Name],
-				change{parse(c.Height), parse(c.Tau)})
-		}
+		t.Fatalf("finalization depth %s ticks", depth)
 	}
 
 	if len(vectors.Finalization) != 13 {
@@ -596,24 +644,15 @@ func TestFinalizationVectors(t *testing.T) {
 	for _, v := range vectors.Finalization {
 		t.Run(v.Name, func(t *testing.T) {
 			sched, ok := schedules[v.Schedule]
-			if !ok && v.Schedule != "empty" {
+			if !ok {
 				t.Fatalf("unknown schedule %q", v.Schedule)
 			}
 			chain := tickFinalizationChain(DefaultMaxReorgDepth,
 				time.Duration(v.FinalizationDelay)*time.Second, v.Now)
 
 			// The blocks after a schedule change have its interval.
-			nodes := []*blockNode{chain.bestChain.Genesis()}
-			for h := int32(1); h <= parse(v.Tip); h++ {
-				parent := nodes[h-1]
-				for _, c := range sched {
-					if parent.height >= c.height {
-						parent.nextInterval = uint16(c.tau)
-					}
-				}
-				nodes = append(nodes, newFakeNode(parent, 1, 0,
-					time.Unix(int64(h), 0)))
-			}
+			nodes := scheduledNodes(chain.bestChain.Genesis(), sched,
+				parse(v.Tip))
 			tip := nodes[len(nodes)-1]
 			chain.bestChain.SetTip(tip)
 			for _, r := range v.Received {
