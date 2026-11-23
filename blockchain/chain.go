@@ -216,6 +216,12 @@ type BlockChain struct {
 	parkDeepReorg      bool
 	automaticUnparking bool
 
+	// bestParked is the tip of the parked chain with the most work found
+	// with more work than the main chain, as Bitcoin Cash Node tracks it.
+	// It is left in place when its chain is unparked or connected, so it
+	// is checked when read.  It is protected by chainLock.
+	bestParked *blockNode
+
 	// upgrade2027ActivationTime is the network's activation time of the
 	// 1-minute block upgrade, or its override.
 	upgrade2027ActivationTime uint64
@@ -3031,6 +3037,9 @@ func New(config *Config) (*BlockChain, error) {
 	b.notifyMaxBlockSizeLookAhead()
 
 	bestNode := b.bestChain.Tip()
+	for _, n := range b.index.tipsAbove(bestNode) {
+		b.noteParked(n)
+	}
 	lastCheckpoint := b.LatestCheckpoint()
 	config.FastSync = config.FastSync && lastCheckpoint != nil && bestNode.height <= lastCheckpoint.Height
 	if fastSyncUnfinished && !config.FastSync {

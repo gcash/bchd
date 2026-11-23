@@ -96,6 +96,7 @@ func (b *BlockChain) parkedChainUsable(node, fork *blockNode, attachNodes *list.
 
 		log.Infof("Considered switching to better tip %v but that "+
 			"chain contains a parked block", node.hash)
+		b.noteParked(node)
 		return false
 	}
 
@@ -103,6 +104,65 @@ func (b *BlockChain) parkedChainUsable(node, fork *blockNode, attachNodes *list.
 		"PoW", node.hash)
 	b.unparkNodes(attachNodes)
 	return true
+}
+
+// onParkedChain returns whether a block between the node and the main chain,
+// the node included, is parked.
+//
+// This function MUST be called with the chain state lock held (for reads).
+func (b *BlockChain) onParkedChain(node *blockNode) bool {
+	for n := node; n != nil && !b.bestChain.Contains(n); n = n.parent {
+		if b.index.NodeStatus(n).Parked() {
+			return true
+		}
+	}
+	return false
+}
+
+// noteParked makes the node the tip of the best parked chain if it is on a
+// parked chain and has more work than the one before.
+//
+// This function MUST be called with the chain state lock held (for writes).
+func (b *BlockChain) noteParked(node *blockNode) {
+	if !b.onParkedChain(node) {
+		return
+	}
+	if b.bestParked == nil || node.workSum.Cmp(b.bestParked.workSum) > 0 {
+		b.bestParked = node
+	}
+}
+
+// BestParkedHeight returns the height of the tip of the parked chain with the
+// most work the node has stored, while that chain has more work than the main
+// chain and is still parked, and -1 otherwise.  A peer whose chain is no
+// higher may only be on that chain, which the node has and doesn't follow.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) BestParkedHeight() int32 {
+	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
+
+	n := b.bestParked
+	if n == nil || n.workSum.Cmp(b.bestChain.Tip().workSum) <= 0 ||
+		b.index.NodeStatus(n).KnownInvalid() || !b.onParkedChain(n) {
+
+		return -1
+	}
+	return n.height
+}
+
+// IsOnParkedChain returns whether the block with the given hash is off the
+// main chain on a parked chain.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) IsOnParkedChain(hash *chainhash.Hash) bool {
+	node := b.index.LookupNode(hash)
+	if node == nil {
+		return false
+	}
+	b.chainLock.RLock()
+	defer b.chainLock.RUnlock()
+	return b.onParkedChain(node)
 }
 
 // unparkNodes unparks the parked nodes of the list and returns them.

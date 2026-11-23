@@ -393,6 +393,7 @@ func (sm *SyncManager) startSync() {
 	}
 
 	best := sm.chain.BestSnapshot()
+	parkedHeight := sm.chain.BestParkedHeight()
 	bestPeers := []*peerpkg.Peer{}
 	okPeers := []*peerpkg.Peer{}
 	behindPeers := []*peerpkg.Peer{}
@@ -407,8 +408,12 @@ func (sm *SyncManager) startSync() {
 		}
 
 		// Add any peers on the same block to okPeers. These should
-		// only be used as a last resort.
-		if peer.LastBlock() == best.Height {
+		// only be used as a last resort.  So are peers no higher than
+		// a parked chain the node has, which they may be on.
+		if peer.LastBlock() == best.Height ||
+			peer.LastBlock() > best.Height &&
+				peer.LastBlock() <= parkedHeight {
+
 			okPeers = append(okPeers, peer)
 			continue
 		}
@@ -910,8 +915,12 @@ func (sm *SyncManager) current() bool {
 	}
 
 	// No matter what chain thinks, if we are below the block we are syncing
-	// to we are not current.
-	if sm.chain.BestSnapshot().Height < syncPeer.LastBlock() {
+	// to we are not current, unless the node has a parked chain that high,
+	// which the sync peer may be on.  The node doesn't follow that chain.
+	lastBlock := syncPeer.LastBlock()
+	if sm.chain.BestSnapshot().Height < lastBlock &&
+		sm.chain.BestParkedHeight() < lastBlock {
+
 		return false
 	}
 	return true
@@ -2115,6 +2124,12 @@ func (sm *SyncManager) handleBlockchainNotification(notification *blockchain.Not
 		block, ok := notification.Data.(*bchutil.Block)
 		if !ok {
 			log.Warnf("Chain accepted notification is not a block.")
+			break
+		}
+
+		// A block on a parked chain is not announced, as in Bitcoin
+		// Cash Node, since the node doesn't follow its chain.
+		if sm.chain.IsOnParkedChain(block.Hash()) {
 			break
 		}
 

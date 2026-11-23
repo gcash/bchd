@@ -814,3 +814,35 @@ func TestUnparkBlockChain(t *testing.T) {
 		"block")
 	p.requireStatus(branch[0], false, false)
 }
+
+// TestBestParkedHeight ensures the best parked height is that of the parked
+// chain with more work than the main chain, also after a restart, and none
+// once that chain is connected.
+func TestBestParkedHeight(t *testing.T) {
+	p := newParkingTest(t, upgrade2027Never, 10, nil)
+	branch := p.mine(p.main[6], 3)
+	if !p.chain.IsOnParkedChain(last(branch).Hash()) ||
+		p.chain.IsOnParkedChain(p.main[10].Hash()) {
+
+		t.Fatal("parked chain not told apart from the main chain")
+	}
+	if height := p.chain.BestParkedHeight(); height != -1 {
+		t.Fatalf("best parked height %d with less work than the main "+
+			"chain", height)
+	}
+
+	// The chain forks 4 blocks deep, so it needs more than 14 blocks.
+	branch = append(branch, p.mine(last(branch), 2)...)
+	if height := p.chain.BestParkedHeight(); height != 11 {
+		t.Fatalf("best parked height %d, want 11", height)
+	}
+	p.reopen(nil)
+	if height := p.chain.BestParkedHeight(); height != 11 {
+		t.Fatalf("best parked height %d after a restart, want 11", height)
+	}
+	branch = append(branch, p.mine(last(branch), 4)...)
+	p.requireTip(last(branch), "chain with enough work")
+	if height := p.chain.BestParkedHeight(); height != -1 {
+		t.Fatalf("best parked height %d once connected", height)
+	}
+}
