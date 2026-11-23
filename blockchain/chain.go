@@ -253,12 +253,13 @@ type BlockChain struct {
 	shutdownRequestOnce sync.Once
 
 	// processLock is held throughout each change to the chain, which
-	// ProcessBlock, InvalidateBlock, ReconsiderBlock, FinalizeBlock and
-	// AddHeader make, and is taken before chainLock.  A change releases
-	// chainLock while it sends a notification, so that the callbacks can
-	// call into the chain, though they can't make a change, and
-	// processLock keeps the other changes out meanwhile: none starts in
-	// the middle of another, and the notifications are sent serially.
+	// ProcessBlock, InvalidateBlock, ReconsiderBlock, ParkBlock,
+	// UnparkBlock, FinalizeBlock and AddHeader make, and is taken before
+	// chainLock.  A change releases chainLock while it sends a
+	// notification, so that the callbacks can call into the chain, though
+	// they can't make a change, and processLock keeps the other changes
+	// out meanwhile: none starts in the middle of another, and the
+	// notifications are sent serially.
 	processLock sync.Mutex
 
 	// The following caches are used to efficiently keep track of the

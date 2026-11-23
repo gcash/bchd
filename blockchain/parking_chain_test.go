@@ -630,3 +630,187 @@ func TestParkedStatusRow(t *testing.T) {
 		}
 	}
 }
+
+// requireStatus fails the test unless the block's parked and invalid flags
+// are as given.
+func (p *parkingTest) requireStatus(block *bchutil.Block, parked, invalid bool) {
+	p.t.Helper()
+	status := p.chain.index.NodeStatus(p.node(block))
+	if status.Parked() != parked || status.KnownInvalid() != invalid {
+		p.t.Fatalf("block %v parked %v, invalid %v, want %v and %v",
+			block.Hash(), status.Parked(), status.KnownInvalid(),
+			parked, invalid)
+	}
+}
+
+// TestParkUnparkBlock ensures parking a block takes it and the blocks built
+// on it off the main chain while automatic unparking is off, and unparking
+// any of them brings them back, and that parking and validity are kept
+// apart in every order of parking, invalidating, reconsidering and
+// unparking, as in Bitcoin Cash Node's parked chain test.
+func TestParkUnparkBlock(t *testing.T) {
+	type step struct {
+		name  string
+		apply func(*BlockChain, *chainhash.Hash) error
+	}
+	park := step{"park", (*BlockChain).ParkBlock}
+	unpark := step{"unpark", (*BlockChain).UnparkBlock}
+	invalidate := step{"invalidate", (*BlockChain).InvalidateBlock}
+	reconsider := step{"reconsider", (*BlockChain).ReconsiderBlock}
+
+	for _, test := range []struct {
+		steps []step
+
+		// tips are the main chain tip after each step as a main chain
+		// block, and parked and invalid the flags of block 8.
+		tips    []int
+		parked  []bool
+		invalid []bool
+	}{{
+		steps:   []step{invalidate, park, unpark, reconsider},
+		tips:    []int{7, 7, 7, 10},
+		parked:  []bool{false, true, false, false},
+		invalid: []bool{true, true, true, false},
+	}, {
+		steps:   []step{park, invalidate, reconsider, unpark},
+		tips:    []int{7, 7, 7, 10},
+		parked:  []bool{true, true, true, false},
+		invalid: []bool{false, true, false, false},
+	}, {
+		steps:   []step{invalidate, park, reconsider, unpark},
+		tips:    []int{7, 7, 7, 10},
+		parked:  []bool{false, true, true, false},
+		invalid: []bool{true, true, false, false},
+	}, {
+		steps:   []step{park, invalidate, unpark, reconsider},
+		tips:    []int{7, 7, 7, 10},
+		parked:  []bool{true, true, false, false},
+		invalid: []bool{false, true, true, false},
+	}} {
+		var names []string
+		for _, s := range test.steps {
+			names = append(names, s.name)
+		}
+		t.Run(fmt.Sprint(names), func(t *testing.T) {
+			p := newParkingTest(t, upgrade2027Never, 10, func(c *Config) {
+				c.NoAutomaticUnparking = true
+			})
+			for i, s := range test.steps {
+				if err := s.apply(p.chain, p.main[8].Hash()); err != nil {
+					t.Fatalf("%s: %v", s.name, err)
+				}
+				p.requireTip(p.main[test.tips[i]], s.name)
+				p.requireStatus(p.main[8], test.parked[i],
+					test.invalid[i])
+			}
+			p.requireNoParkedMainChain()
+		})
+	}
+
+	// Parking a block 2 below the tip takes the chain off, and unparking
+	// the old tip unparks the blocks below it too.
+	p := newParkingTest(t, upgrade2027Never, 10, func(c *Config) {
+		c.NoAutomaticUnparking = true
+	})
+	if err := p.chain.ParkBlock(p.main[8].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(p.main[7], "parked block 8")
+	if err := p.chain.ParkBlock(p.main[8].Hash()); err != nil {
+		t.Fatalf("park a parked block: %v", err)
+	}
+	if err := p.chain.UnparkBlock(p.main[10].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(p.main[10], "unparked block 10")
+	p.requireStatus(p.main[8], false, false)
+	if err := p.chain.UnparkBlock(p.main[10].Hash()); err != nil {
+		t.Fatalf("unpark a block that is not parked: %v", err)
+	}
+
+	// Unparking a block 2 below the tip unparks the blocks built on it.
+	if err := p.chain.ParkBlock(p.main[9].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.chain.ParkBlock(p.main[10].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(p.main[8], "parked blocks 9 and 10")
+	if err := p.chain.UnparkBlock(p.main[9].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(p.main[10], "unparked block 9")
+	p.requireNoParkedMainChain()
+
+	// Unknown blocks and the genesis block are refused.
+	if err := p.chain.ParkBlock(&chainhash.Hash{1}); err == nil {
+		t.Fatal("parked an unknown block")
+	}
+	if err := p.chain.UnparkBlock(&chainhash.Hash{1}); err == nil {
+		t.Fatal("unparked an unknown block")
+	}
+	if err := p.chain.ParkBlock(p.main[0].Hash()); err == nil {
+		t.Fatal("parked the genesis block")
+	}
+}
+
+// TestParkBlockAutomaticUnparking ensures a parked tip is connected again at
+// once while unparking is automatic, as in Bitcoin Cash Node.
+func TestParkBlockAutomaticUnparking(t *testing.T) {
+	p := newParkingTest(t, upgrade2027Never, 10, nil)
+	if err := p.chain.ParkBlock(p.main[10].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(p.main[10], "parked tip")
+	p.requireNoParkedMainChain()
+
+	// Parking a block deeper connects the chain again the same way.
+	if err := p.chain.ParkBlock(p.main[7].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(p.main[10], "parked block 7")
+	p.requireNoParkedMainChain()
+}
+
+// TestParkBlockOtherChain ensures parking the tip connects another chain with
+// more work than its parent, as Bitcoin Cash Node chooses its chain again
+// among all blocks.
+func TestParkBlockOtherChain(t *testing.T) {
+	p := newParkingTest(t, upgrade2027Never, 10, func(c *Config) {
+		c.NoAutomaticUnparking = true
+	})
+	sibling := p.mine(p.main[9], 1)
+	if err := p.chain.ParkBlock(p.main[10].Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(sibling[0], "sibling of the parked tip")
+	p.requireStatus(p.main[10], true, false)
+}
+
+// TestUnparkBlockChain ensures unparking a chain that stays parked with
+// automatic unparking off connects it, unless it forks the chain below the
+// finalized block.
+func TestUnparkBlockChain(t *testing.T) {
+	noUnparking := func(c *Config) { c.NoAutomaticUnparking = true }
+	p := newParkingTest(t, upgrade2027Never, 10, noUnparking)
+	branch := p.mine(p.main[8], 3)
+	p.requireTip(p.main[10], "parked chain")
+	if err := p.chain.UnparkBlock(last(branch).Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(last(branch), "unparked chain")
+	p.requireNoParkedMainChain()
+
+	// A chain parked before the main chain was finalized past its fork.
+	p = newParkingTest(t, upgrade2027Never, 10, noUnparking)
+	branch = p.mine(p.main[6], 10)
+	p.chain.chainLock.Lock()
+	p.chain.finalizedNode = p.node(p.main[8])
+	p.chain.chainLock.Unlock()
+	if err := p.chain.UnparkBlock(last(branch).Hash()); err != nil {
+		t.Fatal(err)
+	}
+	p.requireTip(p.main[10], "unparked chain forking below the finalized "+
+		"block")
+	p.requireStatus(branch[0], false, false)
+}

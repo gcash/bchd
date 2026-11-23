@@ -6,7 +6,10 @@ package blockchain
 
 import (
 	"container/list"
+	"fmt"
 	"math/big"
+
+	"github.com/gcash/bchd/chaincfg/chainhash"
 )
 
 const (
@@ -115,4 +118,98 @@ func (b *BlockChain) unparkNodes(nodes *list.List) []*blockNode {
 		}
 	}
 	return unparked
+}
+
+// ParkBlock parks the block with the given hash, as Bitcoin Cash Node's
+// parkblock does.  When the block is in the main chain, the main chain is
+// disconnected down to its parent.  The chain with the most work the node
+// has is then connected, if it has no parked block or can be unparked.  The
+// block's own chain can be at once while unparking is automatic, since the
+// main chain then has no work past the fork.  Parking a parked block is not
+// an error.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) ParkBlock(hash *chainhash.Hash) error {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
+
+	node := b.index.LookupNode(hash)
+	if node == nil {
+		return fmt.Errorf("block %s is not known", hash)
+	}
+	if node.parent == nil {
+		return fmt.Errorf("block %s has no parent", hash)
+	}
+
+	// The block is parked before the reorganization, which releases the
+	// chain lock while it sends notifications, so that blocks arriving
+	// meanwhile can't extend its chain, and a failure takes it back.
+	b.chainLock.Lock()
+	wasParked := b.index.NodeStatus(node).Parked()
+	b.index.SetStatusFlags(node, statusParked)
+	if b.bestChain.Contains(node) {
+		detachNodes, attachNodes := b.getReorganizeNodes(node.parent)
+		err := b.reorganizeChain(detachNodes, attachNodes)
+		if err != nil {
+			if !wasParked {
+				b.index.UnsetStatusFlags(node, statusParked)
+			}
+			if writeErr := b.index.flushToDB(); writeErr != nil {
+				log.Warnf("Error flushing block index changes to "+
+					"disk: %v", writeErr)
+			}
+			b.chainLock.Unlock()
+			return err
+		}
+	}
+	b.chainLock.Unlock()
+	log.Debugf("Parked block %v (height %d)", node.hash, node.height)
+
+	err := b.reorganizeToBestKnown()
+
+	if writeErr := b.index.flushToDB(); writeErr != nil {
+		log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+	}
+	return err
+}
+
+// UnparkBlock unparks the block with the given hash, the blocks between it
+// and the main chain and the blocks built on it, as Bitcoin Cash Node's
+// unparkblock does, and connects the best chain among them if it has more
+// work than the main chain.  Unparking a block that is not parked is not an
+// error.
+//
+// This function is safe for concurrent access.
+func (b *BlockChain) UnparkBlock(hash *chainhash.Hash) error {
+	b.processLock.Lock()
+	defer b.processLock.Unlock()
+
+	node := b.index.LookupNode(hash)
+	if node == nil {
+		return fmt.Errorf("block %s is not known", hash)
+	}
+	descendants := b.index.descendants(node)
+
+	b.chainLock.Lock()
+	unpark := func(n *blockNode) {
+		if b.index.NodeStatus(n).Parked() {
+			b.index.UnsetStatusFlags(n, statusParked)
+		}
+	}
+	for n := node; n != nil && !b.bestChain.Contains(n); n = n.parent {
+		unpark(n)
+	}
+	for _, n := range descendants {
+		unpark(n)
+	}
+	b.chainLock.Unlock()
+	log.Debugf("Unparked block %v (height %d) and the blocks built on it",
+		node.hash, node.height)
+
+	err := b.reorganizeToBest(append([]*blockNode{node}, descendants...))
+
+	if writeErr := b.index.flushToDB(); writeErr != nil {
+		log.Warnf("Error flushing block index changes to disk: %v", writeErr)
+	}
+	return err
 }
