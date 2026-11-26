@@ -35,10 +35,13 @@ func newHTTPClient(apiURL string, logRequestBody bool) (*HTTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The timeout is longer than the time the node has to answer the call
+	// that checks it before a test, since a node that answered that call in
+	// time can take tens of seconds over the next.
 	client := &HTTPClient{
 		Client: &http.Client{
 			Jar:     cookies,
-			Timeout: 10 * time.Second,
+			Timeout: 30 * time.Second,
 		},
 		LogRequestBody: logRequestBody,
 		apiURL:         apiURL,

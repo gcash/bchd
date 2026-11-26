@@ -30,7 +30,8 @@ const dustLimit = 546
 var httpClient *HTTPClient
 
 // nodeTimeout is how long the BCHD node has to answer the call that checks
-// it, the timeout of the HTTP client the tests call the proxy with.
+// it. The calls the tests make through the proxy get longer (see
+// newHTTPClient).
 const nodeTimeout = 10 * time.Second
 
 // nodeErr is why the BCHD node the proxy forwards to didn't answer the call
