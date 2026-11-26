@@ -17,6 +17,20 @@ type FilterType uint8
 const (
 	// GCSFilterRegular is the regular filter type.
 	GCSFilterRegular FilterType = iota
+
+	// GCSFilterScripts is the script filter type: the scripts of the outputs
+	// a block creates and spends, their token categories, and the IDs of the
+	// block's transactions, served with the root of the block's entry tree
+	// in front (gcash/bchd#767).
+	GCSFilterScripts
+
+	// GCSFilterInputPrefix is the input prefix filter type: the first two
+	// bytes of the double SHA-256 of each of the first 30 inputs of every
+	// transaction but the coinbase, which a wallet on a reusable payment
+	// address matches with its prefix. It is not a GCS filter: its 16-bit
+	// values are Rice coded as they are, or kept as a bitmap of every 16-bit
+	// value when there are 19,197 or more.
+	GCSFilterInputPrefix
 )
 
 const (
