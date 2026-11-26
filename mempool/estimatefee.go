@@ -118,14 +118,22 @@ func deserializeObservedTransaction(r io.Reader) (*observedTransaction, error) {
 	ot := observedTransaction{}
 
 	// The first 32 bytes should be a hash.
-	_ = binary.Read(r, binary.BigEndian, &ot.hash)
+	if err := binary.Read(r, binary.BigEndian, &ot.hash); err != nil {
+		return nil, err
+	}
 
 	// The next 8 are SatoshiPerByte
-	_ = binary.Read(r, binary.BigEndian, &ot.feeRate)
+	if err := binary.Read(r, binary.BigEndian, &ot.feeRate); err != nil {
+		return nil, err
+	}
 
 	// And next there are two uint32's.
-	_ = binary.Read(r, binary.BigEndian, &ot.observed)
-	_ = binary.Read(r, binary.BigEndian, &ot.mined)
+	if err := binary.Read(r, binary.BigEndian, &ot.observed); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(r, binary.BigEndian, &ot.mined); err != nil {
+		return nil, err
+	}
 
 	return &ot, nil
 }
