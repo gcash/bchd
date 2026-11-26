@@ -196,6 +196,8 @@ type config struct {
 	SlpGraphSearch          bool          `long:"slpgraphsearch" description:"Enables gRPC calls related to slp graph search."`
 	BcmrIndex               bool          `long:"bcmrindex" description:"Maintain an index of the authchain of every token category, and of every authchain that holds a BCMR metadata registry publication, from where it begins, which makes the getbcmridentity and GetBcmrIdentity RPCs available"`
 	DropBcmrIndex           bool          `long:"dropbcmrindex" description:"Deletes the BCMR index from the database on start up and then exits."`
+	NoScriptFilters         bool          `long:"noscriptfilters" description:"Disable the script filter index and serving script filters (filter type 1), which list the scripts of the outputs each block creates and spends, to light clients"`
+	DropScriptFilterIndex   bool          `long:"dropscriptfilterindex" description:"Deletes the script filter index from the database on start up and then exits."`
 	RelayNonStd             bool          `long:"relaynonstd" description:"Relay non-standard transactions regardless of the default settings for the active network."`
 	RejectNonStd            bool          `long:"rejectnonstd" description:"Reject non-standard transactions regardless of the default settings for the active network."`
 	Prune                   bool          `long:"prune" description:"Delete historical blocks from the chain. A buffer of blocks will be retained in case of a reorg."`
