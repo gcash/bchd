@@ -42,6 +42,16 @@ type GrpcProxy struct {
 	server *http.Server
 }
 
+// grpcCredentials returns the transport credentials of the connection to the
+// BCHD gRPC server: TLS with the root certificate at grpcRootCertPath if one
+// is given, else TLS with the system roots.
+func grpcCredentials() (credentials.TransportCredentials, error) {
+	if *grpcRootCertPath != "" {
+		return credentials.NewClientTLSFromFile(*grpcRootCertPath, "")
+	}
+	return credentials.NewTLS(nil), nil
+}
+
 func (proxy *GrpcProxy) serveHTTP(ctx context.Context) error {
 	var err error
 
@@ -53,14 +63,9 @@ func (proxy *GrpcProxy) serveHTTP(ctx context.Context) error {
 	grpcGateway := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, marshaller),
 	)
-	var creds credentials.TransportCredentials
-	if *grpcRootCertPath != "" {
-		creds, err = credentials.NewClientTLSFromFile(*grpcRootCertPath, "")
-		if err != nil {
-			glog.Fatal(err)
-		}
-	} else {
-		creds = credentials.NewTLS(nil)
+	creds, err := grpcCredentials()
+	if err != nil {
+		glog.Fatal(err)
 	}
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(4294967295))}
 	err = gw.RegisterBchrpcHandlerFromEndpoint(ctx, grpcGateway, *grpcServerEndpoint, opts)

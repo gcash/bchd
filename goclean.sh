@@ -20,9 +20,9 @@ fi
 env GO111MODULE=on golangci-lint run
 
 # The bchrpc/proxy tests skip those that need the remote BCHD node when it
-# can't be reached, and go test shows skips only with -v, so that package is
-# tested on its own with -v.  Its SKIP, ok and FAIL lines are shown, or all of
-# its output when it fails.
+# doesn't answer a call, and go test shows skips only with -v, so that package
+# is tested on its own with -v.  The reason for a skip and its SKIP, ok and
+# FAIL lines are shown, or all of its output when it fails.
 proxy=github.com/gcash/bchd/bchrpc/proxy
 env GO111MODULE=on go test -tags rpctest $(env GO111MODULE=on go list -tags rpctest ./... | grep -vx "$proxy")
 proxy_log=$(mktemp)
@@ -30,5 +30,5 @@ if ! env GO111MODULE=on go test -tags rpctest -v "$proxy" >"$proxy_log" 2>&1; th
   cat "$proxy_log"
   exit 1
 fi
-grep -E '^ *--- (SKIP|FAIL)|^(ok|FAIL)' "$proxy_log" || true
+grep -E "BCHD node .* doesn't answer|^ *--- (SKIP|FAIL)|^(ok|FAIL)" "$proxy_log" || true
 rm "$proxy_log"
