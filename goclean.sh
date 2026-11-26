@@ -30,5 +30,5 @@ if ! env GO111MODULE=on go test -tags rpctest -v "$proxy" >"$proxy_log" 2>&1; th
   cat "$proxy_log"
   exit 1
 fi
-grep -E "BCHD node .* doesn't answer, skipping|^ *--- (SKIP|FAIL)|^(ok|FAIL)" "$proxy_log" || true
+grep -E "BCHD node .* doesn't answer|^ *--- (SKIP|FAIL)|^(ok|FAIL)" "$proxy_log" || true
 rm "$proxy_log"

@@ -125,12 +125,16 @@ func checkNode(endpoint string) error {
 }
 
 // requireNode skips the test if the BCHD node the proxy forwards to didn't
-// answer the call checkNode made.
+// answer the call checkNode made before the tests, or doesn't answer one now,
+// since a node that answered then can stall for minutes while they run.
 func requireNode(t *testing.T) {
 	t.Helper()
-	if nodeErr != nil {
-		t.Skipf("BCHD node %s doesn't answer: %v", *grpcServerEndpoint,
-			nodeErr)
+	err := nodeErr
+	if err == nil {
+		err = checkNode(*grpcServerEndpoint)
+	}
+	if err != nil {
+		t.Skipf("BCHD node %s doesn't answer: %v", *grpcServerEndpoint, err)
 	}
 }
 
