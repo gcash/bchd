@@ -1,5 +1,5 @@
-github.com/CyberAshven/bchutil v0.0.0-20261116153249-b7fd6dc200af h1:/ktNR8k5YzDM/0j8S+boyET12SSnXOi49kBEclV2cG8=
-github.com/CyberAshven/bchutil v0.0.0-20261116153249-b7fd6dc200af/go.mod h1:PUl4oVSi94FsHVSOFdAaYG0iFOEG2xrXjet1EEqOSss=
+github.com/CyberAshven/bchutil v0.0.0-20261126050125-9d71f2308d13 h1:G8KhEWykZVvbMlA9ab/IDlmBni3dntXO/I+nWOkEBL4=
+github.com/CyberAshven/bchutil v0.0.0-20261126050125-9d71f2308d13/go.mod h1:PUl4oVSi94FsHVSOFdAaYG0iFOEG2xrXjet1EEqOSss=
 github.com/aead/siphash v1.0.1 h1:FwHfE/T45KPKYuuSAKyyvE+oPWcaQ+CUmFW0bPlM+kg=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

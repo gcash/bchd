@@ -1796,8 +1796,7 @@ func (sp *serverPeer) OnGetCFRange(_ *peer.Peer, msg *wire.MsgGetCFRange) {
 		peerLog.Debugf("Ignoring getcfrange from %s: %v", sp, err)
 		return
 	}
-	leaves := entry.leaves
-	first, end, err := builder.ScriptLeavesWithPrefix(leaves, &msg.Prefix, msg.PrefixBits)
+	r, err := entry.tree.Range(&msg.Prefix, msg.PrefixBits)
 	if err != nil {
 		peerLog.Debugf("Ignoring getcfrange from %s: %v", sp, err)
 		return
@@ -1806,37 +1805,28 @@ func (sp *serverPeer) OnGetCFRange(_ *peer.Peer, msg *wire.MsgGetCFRange) {
 	reply := &wire.MsgCFRange{
 		FilterType: msg.FilterType,
 		BlockHash:  msg.BlockHash,
-		LeafCount:  uint32(len(leaves)),
-		FirstIndex: uint32(first),
-		Leaves:     make([]wire.CFLeaf, 0, end-first),
+		LeafCount:  r.Count,
+		FirstIndex: r.First,
+		Leaves:     make([]wire.CFLeaf, 0, len(r.Run)),
+		Hashes:     r.Hashes,
 	}
-	for i := first; i < end; i++ {
-		reply.Leaves = append(reply.Leaves, wire.CFLeaf(leaves[i].Bytes()))
+	for i := range r.Run {
+		reply.Leaves = append(reply.Leaves, wire.CFLeaf(r.Run[i].Bytes()))
 	}
-	lo, hi := first, end
-	if first > 0 {
-		before := wire.CFLeaf(leaves[first-1].Bytes())
+	if r.Before != nil {
+		before := wire.CFLeaf(r.Before.Bytes())
 		reply.Before = &before
-		lo--
 	}
-	if end < len(leaves) {
-		after := wire.CFLeaf(leaves[end].Bytes())
+	if r.After != nil {
+		after := wire.CFLeaf(r.After.Bytes())
 		reply.After = &after
-		hi++
-	}
-	if lo < hi {
-		reply.Hashes, err = entry.rangeHashes(lo, hi)
-		if err != nil {
-			peerLog.Errorf("Error building cfrange for %v: %v", msg.BlockHash, err)
-			return
-		}
 	}
 
 	// A range too large for one message is not answered. The peer asks
 	// again with a longer prefix, which splits it.
 	if uint64(reply.SerializeSize()) > uint64(reply.MaxPayloadLength(sp.ProtocolVersion())) {
 		peerLog.Debugf("Ignoring getcfrange from %s: %d leaves with the "+
-			"prefix do not fit a message", sp, end-first)
+			"prefix do not fit a message", sp, len(r.Run))
 		return
 	}
 	sp.QueueMessage(reply, nil)
@@ -1867,14 +1857,14 @@ func (sp *serverPeer) OnGetCFProof(_ *peer.Peer, msg *wire.MsgGetCFProof) {
 		peerLog.Debugf("Ignoring getcfproof from %s: %v", sp, err)
 		return
 	}
-	block, stxos, leaves := entry.block, entry.stxos, entry.leaves
+	block, stxos, leaves := entry.block, entry.stxos, entry.tree.Leaves()
 	if msg.LeafIndex >= uint32(len(leaves)) {
 		peerLog.Debugf("Ignoring getcfproof from %s: leaf %d of %d",
 			sp, msg.LeafIndex, len(leaves))
 		return
 	}
 	leaf := &leaves[msg.LeafIndex]
-	leafBranch, err := entry.rangeHashes(int(msg.LeafIndex), int(msg.LeafIndex)+1)
+	leafBranch, err := entry.tree.RangeHashes(int(msg.LeafIndex), int(msg.LeafIndex)+1)
 	if err != nil {
 		peerLog.Errorf("Error building cfproof for %v: %v", msg.BlockHash, err)
 		return

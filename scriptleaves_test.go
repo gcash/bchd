@@ -443,41 +443,20 @@ func TestScriptLeavesCacheErrorKeepsOther(t *testing.T) {
 	}
 }
 
-// TestScriptLeavesOfBlockRangeHashes checks that the hashes a kept entry
-// gives for every run of the leaves of trees of 1 to 40 leaves are the ones
-// builder.ScriptRangeHashes computes from the leaves alone, that the top of
-// the kept levels is the tree's root, and that a run the tree doesn't have
-// is refused.
-func TestScriptLeavesOfBlockRangeHashes(t *testing.T) {
+// TestScriptLeavesOfBlockTree checks that a kept entry's tree holds the
+// block's leaves and has their root. The tree's ranges and branches are
+// tested in bchutil.
+func TestScriptLeavesOfBlockTree(t *testing.T) {
 	block := scriptLeavesTestBlock(t, 21)
-	for n := 1; n <= 40; n++ {
+	for n := 0; n <= 5; n++ {
 		leaves := make([]builder.ScriptLeaf, n)
 		for i := range leaves {
 			binary.BigEndian.PutUint32(leaves[i].Key[:4], uint32(i))
-			leaves[i].TxIndex = uint32(i % 3)
 			leaves[i].Kind = builder.ScriptLeafKind(i % 5)
 		}
 		entry := newScriptLeavesOfBlock(block, nil, leaves)
-		root := builder.ScriptLeavesRoot(leaves)
-		if n > 1 && entry.upper[len(entry.upper)-1][0] != root {
-			t.Fatalf("%d leaves: the top kept level is not the root", n)
-		}
-		for lo := 0; lo < n; lo++ {
-			for end := lo + 1; end <= n; end++ {
-				want, err := builder.ScriptRangeHashes(leaves, lo, end)
-				if err != nil {
-					t.Fatal(err)
-				}
-				got, err := entry.rangeHashes(lo, end)
-				if err != nil || !slices.Equal(got, want) {
-					t.Fatalf("%d leaves, run %d to %d: %v, %v; want %v", n, lo, end, got, err, want)
-				}
-			}
-		}
-		for _, bad := range [][2]int{{-1, 1}, {0, 0}, {n, n + 1}, {0, n + 1}} {
-			if _, err := entry.rangeHashes(bad[0], bad[1]); !errors.Is(err, errScriptRangeRun) {
-				t.Errorf("%d leaves, run %d to %d: %v", n, bad[0], bad[1], err)
-			}
+		if !slices.Equal(entry.tree.Leaves(), leaves) || entry.tree.Root() != builder.ScriptLeavesRoot(leaves) {
+			t.Errorf("%d leaves: the entry's tree has other leaves or another root", n)
 		}
 	}
 }
