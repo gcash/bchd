@@ -28,7 +28,8 @@ const (
 	// bytes of the double SHA-256 of each of the first 30 inputs of every
 	// transaction but the coinbase, which a wallet on a reusable payment
 	// address matches with its prefix. It is not a GCS filter: its 16-bit
-	// values are Rice coded as they are.
+	// values are Rice coded as they are, or kept as a bitmap of every 16-bit
+	// value when there are 19,197 or more.
 	GCSFilterInputPrefix
 )
 
