@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +19,7 @@ import (
 	"github.com/gcash/bchd/bchrpc/pb"
 	"github.com/golang/glog"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
 )
 
 const bchdTestNode = "bchd.greyh.at:8335"
@@ -29,8 +29,12 @@ const dustLimit = 546
 
 var httpClient *HTTPClient
 
-// nodeErr is why the BCHD node the proxy forwards to can't be reached, if it
-// can't.
+// nodeTimeout is how long the BCHD node has to answer the call that checks
+// it, the timeout of the HTTP client the tests call the proxy with.
+const nodeTimeout = 10 * time.Second
+
+// nodeErr is why the BCHD node the proxy forwards to didn't answer the call
+// that checks it, if it didn't.
 var nodeErr error
 
 func TestMain(m *testing.M) {
@@ -44,15 +48,13 @@ func TestMain(m *testing.M) {
 		grpcServerEndpoint = &testFullNodeEndpoint
 	}
 
-	// The node may be down, for example while it rebuilds an index, so the
-	// tests that need it are skipped if it can't be reached.
-	conn, err := net.DialTimeout("tcp", *grpcServerEndpoint, 10*time.Second)
-	if err != nil {
-		nodeErr = err
-		log.Printf("BCHD node %s can't be reached, skipping the tests that "+
-			"need it: %v", *grpcServerEndpoint, err)
-	} else {
-		conn.Close()
+	// The node may be down, for example while it rebuilds an index, or take
+	// connections and answer no call, so the tests that need it are skipped
+	// if it doesn't answer a call.
+	nodeErr = checkNode(*grpcServerEndpoint)
+	if nodeErr != nil {
+		log.Printf("BCHD node %s doesn't answer, skipping the tests that "+
+			"need it: %v", *grpcServerEndpoint, nodeErr)
 	}
 
 	log.Println("Starting local test HTTP server...")
@@ -96,12 +98,38 @@ func TestMain(m *testing.M) {
 	os.Exit(exitVal)
 }
 
-// requireNode skips the test if the BCHD node the proxy forwards to can't be
-// reached.
+// checkNode makes a GetBlockchainInfo call to the BCHD node at endpoint
+// directly, as the proxy connects to it, and returns why it got no answer
+// within nodeTimeout, if it got none. It doesn't go through the proxy, so a
+// fault of the proxy still fails the tests rather than skipping them.
+func checkNode(endpoint string) error {
+	creds, err := grpcCredentials()
+	if err != nil {
+		return err
+	}
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), nodeTimeout)
+	defer cancel()
+	_, err = pb.NewBchrpcClient(conn).GetBlockchainInfo(ctx,
+		&pb.GetBlockchainInfoRequest{})
+	if err != nil {
+		return fmt.Errorf("no answer to GetBlockchainInfo within %v: %w",
+			nodeTimeout, err)
+	}
+	return nil
+}
+
+// requireNode skips the test if the BCHD node the proxy forwards to didn't
+// answer the call checkNode made.
 func requireNode(t *testing.T) {
 	t.Helper()
 	if nodeErr != nil {
-		t.Skipf("BCHD node %s can't be reached: %v", *grpcServerEndpoint,
+		t.Skipf("BCHD node %s doesn't answer: %v", *grpcServerEndpoint,
 			nodeErr)
 	}
 }
